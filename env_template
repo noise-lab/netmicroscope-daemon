@@ -1,0 +1,7 @@
+export INFLUXDB_ENABLE=true
+export INFLUXDB_HOST=example.com
+export INFLUXDB_PORT=9000
+export INFLUXDB_WRITE_USER=influxagent
+export INFLUXDB_WRITE_USER_PASSWORD=
+export INFLUXDB_DEPLOYMENT=
+export INFLUXDB_DB=nmdb
