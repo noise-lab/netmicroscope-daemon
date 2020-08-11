@@ -8,8 +8,9 @@ import daemon.pidfile
 import argparse
 import signal
 import logging
+from appmonitor.appmonitor import AppMonitor
 
-PROGNAME = 'monitor'
+PROGNAME = 'appmonitor'
 PATHCTRL = '/tmp/' #path to control files pid and lock
 logpath = os.path.join(PATHCTRL, PROGNAME + ".log")
 pidpath = os.path.join(PATHCTRL, PROGNAME + ".pid")
@@ -54,11 +55,9 @@ def main_thread(args, mainctrl):
     if verbose:
       log.info("ARGS:{0}".format(args))
     try:
-      while mainctrl.thread_continue:
-         if verbose:
-            log.info("TOKEN:{0}".format(mainctrl.thread_token))
-         time.sleep(1)
-    except KeyboardInterrupt as ke:
+      app = AppMonitor(log)
+      app.run(mainctrl.thread_continue)
+    except KeyboardInterrupt: # as ke:
       if verbose:
         log.warning("Interrupting...") 
     except Exception as e:
@@ -108,7 +107,8 @@ def daemon_stop(args=None):
 
 def daemon_debug(args):
     print("INFO: running in debug mode.")
-    main_thread(args, mainctrl)
+    app = AppMonitor()
+    app.run(mainctrl.thread_continue)
 
 def daemon_status(args):
     print("INFO: {0} Status {1}".format(PROGNAME, args))

@@ -214,7 +214,7 @@ class AppMonitor:
         #  pickle.dump(filestatus, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return True
 
-  def run(self):
+  def run(self, thread_continue):
     self.observer.schedule(self.event_handler, path='/tmp/', recursive=False)
     self.observer.start()
     if os.getenv('INFLUXDB_ENABLE') == 'true':
@@ -262,7 +262,7 @@ class AppMonitor:
     self.printF("MAIN: joining threads")
 
     try:
-        while True:
+        while thread_continue:
           time.sleep(1)
           try:
             for k in self.filestatus.keys():
