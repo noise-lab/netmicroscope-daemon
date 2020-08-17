@@ -1,0 +1,2 @@
+SELECT mean("value") FROM "network_traffic_application_kbpsdw" WHERE $timeFilter AND "deployment"='test'  GROUP BY time($__interval), "application", "device"  fill(null)
+SELECT mean("value") FROM "network_traffic_application_kbpsup" WHERE $timeFilter AND "deployment"='test'  GROUP BY time($__interval), "application", "device"  fill(null)
