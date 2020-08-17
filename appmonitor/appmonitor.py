@@ -7,8 +7,8 @@ import json
 import pickle
 import traceback
 import threading
-import urllib
 import queue
+import urllib
 import urllib.parse
 import urllib.request
 
@@ -20,15 +20,17 @@ class AppMonitor:
   """AppMonitor"""
 
   FILESTATUS = "processedfiles.pickle" #TODO: TBD
+  thread_ctrl = None
   filestatus = {}
   influxdb = None 
   event_handler = None
   observer = None
   logger = None
 
-  def __init__(self, logger = None):
+  def __init__(self, thread_ctrl, logger = None):
     load_dotenv(verbose=True)
-    self.influxdb = self.InfluxDB(self.printF)
+    self.thread_ctrl = thread_ctrl
+    self.influxdb = self.InfluxDB(self.printF, self.thread_ctrl)
     self.event_handler = self.TMPHandler(self.process_tmp_ta, 
       self.filestatus,
       self.printF)
@@ -49,6 +51,7 @@ class AppMonitor:
     passw = None
     deployment = None
     database = None
+    thread_ctrl = None 
 
     #var built at runtime
     url = None
@@ -59,15 +62,16 @@ class AppMonitor:
     #insert = None #inser queue
     influxdb_queue = None
 
-    def __init__(self, printF):
+    def __init__(self, printF, thread_ctrl):
       self.influxdb_queue = queue.Queue()
       self.printF = printF
+      self.thread_ctrl = thread_ctrl
     
     def printF(self, m):
       self.printF(m)
 
     def influxdb_updater_thread(self):
-      while True:
+      while self.thread_ctrl['continue']:
           if self.url == None:
             self.url = "https://" + self.host + ":" + self.port + "/api/v2/write?bucket=" +\
               self.database + "/rp&precision=ns"
@@ -125,7 +129,7 @@ class AppMonitor:
             except Exception as e:
               self.printF("TMPHandler: {0}".format(e))
           else:
-            self.printF("File is still there:"+ event.src_path)
+            self.printF("WARNING, ramaining data in "+ event.src_path)
             sys.exit(0)
         #else:
         #  self.printF("does not match: "+event.src_path)
@@ -173,7 +177,7 @@ class AppMonitor:
           self.filestatus[filename]['running'] = True
           self.filestatus[filename]['tail'] = sh.tail("-F", filename, _iter=True, _bg_exc=False)
   
-        while self.filestatus[filename]['running']:
+        while self.filestatus[filename]['running'] and self.thread_ctrl['continue']:
           try:
               line = self.filestatus[filename]['tail'].next()
               j=json.loads(line)
@@ -214,7 +218,7 @@ class AppMonitor:
         #  pickle.dump(filestatus, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return True
 
-  def run(self, thread_continue):
+  def run(self):
     self.observer.schedule(self.event_handler, path='/tmp/', recursive=False)
     self.observer.start()
     if os.getenv('INFLUXDB_ENABLE') == 'true':
@@ -262,7 +266,7 @@ class AppMonitor:
     self.printF("MAIN: joining threads")
 
     try:
-        while thread_continue:
+        while self.thread_ctrl['continue']:
           time.sleep(1)
           try:
             for k in self.filestatus.keys():
