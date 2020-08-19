@@ -5,6 +5,7 @@ lazy-object-proxy==1.4.3
 lockfile==0.12.2
 mccabe==0.6.1
 pathtools==0.1.2
+pkg-resources==0.0.0
 pylint==2.5.3
 python-daemon==2.2.4
 python-dotenv==0.14.0

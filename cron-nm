@@ -1,0 +1,1 @@
+@reboot root cd /home/gmartins/; /sbin/ifconfig >/tmp/ifconfig.txt ; sleep 30; ./nm.sh >/tmp/nm.sh.log 2>&1
