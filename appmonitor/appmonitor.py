@@ -13,8 +13,6 @@ import urllib.parse
 import urllib.request
 
 from dotenv import load_dotenv
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
 class AppMonitor:
   """AppMonitor"""
@@ -23,18 +21,13 @@ class AppMonitor:
   thread_ctrl = None
   filestatus = {}
   influxdb = None 
-  event_handler = None
-  observer = None
   logger = None
+  listener = None
 
   def __init__(self, thread_ctrl, logger = None):
     load_dotenv(verbose=True)
     self.thread_ctrl = thread_ctrl
     self.influxdb = self.InfluxDB(self.printF, self.thread_ctrl)
-    self.event_handler = self.TMPHandler(self.process_tmp_ta, 
-      self.filestatus,
-      self.printF)
-    self.observer = Observer()
     self.logger = logger
 
   def printF (self, m):
@@ -57,18 +50,18 @@ class AppMonitor:
     url = None
     header = None
 
-    printF = None
+    printFunc = None
 
     #insert = None #inser queue
     influxdb_queue = None
 
     def __init__(self, printF, thread_ctrl):
       self.influxdb_queue = queue.Queue()
-      self.printF = printF
+      self.printFunc = printF
       self.thread_ctrl = thread_ctrl
     
     def printF(self, m):
-      self.printF(m)
+      self.printFunc(m)
 
     def influxdb_updater_thread(self):
       while self.thread_ctrl['continue']:
@@ -104,69 +97,65 @@ class AppMonitor:
 
           self.influxdb_queue.task_done()
 
-  class TMPHandler(FileSystemEventHandler):
+  class TAHandler():
       process_tmp_ta = None
       filestatus = None
-      printF = None
-      def __init__(self, process_tmp_ta, filestatus, printF):
+      thread_ctrl = None
+      worker = None
+      printFunc = None
+      running = True
+      filename = None
+      def __init__(self, process_tmp_ta, printF, filestatus, thread_ctrl):
         self.process_tmp_ta = process_tmp_ta
         self.filestatus = filestatus
-        self.printF = printF
+        self.printFunc = printF
+        self.thread_ctrl = thread_ctrl
 
       def printF(self, m):
-        self.printF(m)
-
-      def on_modified(self, event):
-        #self.printF(f'INFO: event type: {event.event_type} path: {event.src_path}')
-        if event.src_path.startswith("/tmp/tmp.ta."):
-          if not os.path.isfile(event.src_path):
-            #file moved
-            self.printF("INFO: disabling tail " + event.src_path)
-            self.filestatus[event.src_path]['running'] = False
+        self.printFunc(m)
+      
+      def fsreader(self):
+        while self.thread_ctrl['continue'] and self.running:
+          files=glob.glob("/tmp/tmp.ta.*")
+          if len(files) > 1:
+            self.printF("WARNING: multiple tmp.ta.* files found.")
+          for f in files:
             try:
-              tail = self.filestatus[event.src_path]['tail']
-              tail.kill()
+              if self.filestatus[f]['running']:
+                self.printF("TAHandler {0} is running.".format(f))
+                continue
+              self.printF("TAHandler ignoring {0}.".format(f))
+            except KeyError as ke:
+              if self.worker is not None:
+                self.filestatus[self.filename]['running'] = False
+                self.filestatus[self.filename]['tail'].kill()
+                self.worker.join()
+                self.printF("TAHandler terminating {0}:{1}.".format(f, ke))
+              else:
+                self.printF("TAHandler initializing {0}:{1}.".format(f, ke))
+              self.worker = threading.Thread(target=self.process_tmp_ta, args=(f,))
+              self.filestatus[f] = {}
+              self.filestatus[f]['thread'] = self.worker
+              self.filename = f
+              self.worker.start()
             except Exception as e:
-              self.printF("TMPHandler: {0}".format(e))
-          else:
-            self.printF("WARNING, ramaining data in "+ event.src_path)
-            sys.exit(0)
-        #else:
-        #  self.printF("does not match: "+event.src_path)
+              self.printF("ERROR: {0}".format(e))
+          time.sleep(10)
   
-      def on_created(self, event):
-        if event.src_path.startswith("/tmp/tmp.ta."):
-            self.printF("threading {0}...".format(event.src_path))
-            t = threading.Thread(target=self.process_tmp_ta, args=(event.src_path,))
-            self.filestatus[event.src_path] = {}
-            self.filestatus[event.src_path]['thread'] = t
-            t.start()
+      def start(self):
+        self.thread = threading.Thread(target=self.fsreader)
+        self.thread.start()
+      
+      def stop(self):
+        self.running = False
 
-      #def on_deleted(self, event):
-      #   self.printF(f"INFO: {event.src_path} deleted")
+      def join(self):
+        self.thread.join()
 
-      def on_moved(self, event):
-        self.printF("moved {0} to {1}".format(event.src_path, event.dest_path))
-        self.filestatus[event.src_path]['running'] = False
 
   def process_tmp_ta(self, filename=""):
       if filename == "":
-        files=glob.glob("/tmp/tmp.ta.*")
-        if len(files) > 1:
-          for f in files:
-            if f not in self.filestatus.keys():
-                self.printF("WARNING: multiple tmp.ta.* files found.")
-                t = threading.Thread(target=self.process_tmp_ta, args=(f,))
-                self.filestatus[f] = {}
-                self.filestatus[f]['thread'] = t
-                t.start()
-        elif len(files) > 0:
-          t = threading.Thread(target=self.process_tmp_ta, args=(files[0],))
-          self.filestatus[files[0]] = {}
-          self.filestatus[files[0]]['thread'] = t
-          t.start()
-        else:
-          self.printF("INFO: No files to process now.")  
+        self.printF("INFO: No files to process now.")  
       else:
       
         if not os.path.isfile(filename):
@@ -219,8 +208,8 @@ class AppMonitor:
         return True
 
   def run(self):
-    self.observer.schedule(self.event_handler, path='/tmp/', recursive=False)
-    self.observer.start()
+    self.listener = self.TAHandler(self.process_tmp_ta, self.printF, self.filestatus, self.thread_ctrl)
+    self.listener.start()
     if os.getenv('INFLUXDB_ENABLE') == 'true':
        self.printF("INFO: influxdb enabled, checking environment variables...")
        if os.getenv('INFLUXDB_HOST') is not None:
@@ -262,7 +251,7 @@ class AppMonitor:
     #except FileNotFoundError as e:
     #  pass 
 
-    self.process_tmp_ta()
+    #self.process_tmp_ta()
     self.printF("MAIN: joining threads")
 
     try:
@@ -283,7 +272,8 @@ class AppMonitor:
     except KeyboardInterrupt:
       self.stop()
     self.printF("MAIN: observer join")
-    self.observer.join()
+    #self.observer.join()
+    self.listener.join()
     self.influxdb.influxdb_queue.join()
 
   def stop(self):
