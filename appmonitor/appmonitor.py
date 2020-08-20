@@ -71,30 +71,30 @@ class AppMonitor:
           if self.header == None:
             self.header = {'Authorization': 'Token ' + self.userw + ":" + self.passw}
           insert = self.influxdb_queue.get()
-          #TODO: bundle up insert queries
-          #self.printF(f'influxdb queue working on {insert}')
-          data = ''
-          for dev in insert.keys():
-            for app in insert[dev]:
-              data = data + 'network_traffic_application_kbpsdw'+\
+          try:
+            data = ''
+            for dev in insert.keys():
+              for app in insert[dev]:
+                data = data + 'network_traffic_application_kbpsdw'+\
                   ',deployment=' + self.deployment +\
                   ',device=' + dev +\
                   ',application=' + app +\
                   ' value=' + str(insert[dev][app]['KbpsDw']) +\
                   ' ' + str(insert[dev][app]['TsEnd']) + '000000000' + '\n'
-          for dev in insert.keys():
-            for app in insert[dev]:
-              data = data + 'network_traffic_application_kbpsup'+\
+            for dev in insert.keys():
+              for app in insert[dev]:
+                data = data + 'network_traffic_application_kbpsup'+\
                   ',deployment=' + self.deployment +\
                   ',device=' + dev +\
                   ',application=' + app +\
                   ' value=' + str(insert[dev][app]['KbpsUp']) +\
                   ' ' + str(insert[dev][app]['TsEnd']) + '000000000' + '\n'
-          data = data.encode()
-          req = urllib.request.Request(self.url, data, self.header)
-          with urllib.request.urlopen(req) as response:
-            self.printF('OK' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
-
+             data = data.encode()
+             req = urllib.request.Request(self.url, data, self.header)
+             with urllib.request.urlopen(req) as response:
+              self.printF('OK' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
+          except Exception as e:
+              self.printF("EXCEPTION: influxdb_updater_thread {0}".format(e))
           self.influxdb_queue.task_done()
 
   class TAHandler():
