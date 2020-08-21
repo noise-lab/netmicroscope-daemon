@@ -1,0 +1,1 @@
+@reboot root sleep 30; cd /home/netmicroscope/nm/src/github.com/noise-lab/netmicroscope/cmd/netmicroscope; nohup ./nm >/tmp/nm.log 2>&1 &
