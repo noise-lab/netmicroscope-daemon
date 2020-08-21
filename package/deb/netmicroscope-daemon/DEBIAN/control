@@ -1,5 +1,5 @@
 Package: netmicroscope-daemon
-Version: 0.9.8
+Version: 0.9.9
 Section: custom
 Priority: optional
 Architecture: all
