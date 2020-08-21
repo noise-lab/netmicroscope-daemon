@@ -1,0 +1,6 @@
+nmd
+appmonitor/
+appmonitor.py
+venv/
+.env
+env_template

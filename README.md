@@ -1,7 +1,18 @@
 # netmicroscope-daemon
 NetMicroscope Backend Integration Agent (linux daemon).
 
-#### Install from GitHub ####
+#### Install from .deb package (recommended). ####
+
+1. download ```netmicroscope-daemon-v0.9.8.deb```
+2. run ```sudo dpkg -i netmicroscope-daemon-v0.9.8.deb```
+3. edit .env file and rename to <br>
+```
+vim /usr/local/src/netmicroscope-daemon/env_template &&
+mv /usr/local/src/netmicroscope-daemon/env_template /usr/local/src/netmicroscope-daemon/.env
+```
+4. run ```sudo nmd restart```
+
+#### Manual installation from GitHub ####
 
 ```
 sudo apt-get install python3-venv python3-dev -y
@@ -11,13 +22,13 @@ python3 -m pip install wheel
 python3 -m pip install -r requirements.txt
 ```
 
-#### Crontab Setup ####
+#### Manual Crontab Setup ####
 
 ```
 @reboot root cd /home/<user>/netmicroscope-daemon; sleep 30; ./nm.sh >/tmp/nm.sh.log 2>&1
 ```
 
-where nm.sh should look like:
+where <b>nm.sh</b> should look like:
 ```
 #!/bin/bash
 

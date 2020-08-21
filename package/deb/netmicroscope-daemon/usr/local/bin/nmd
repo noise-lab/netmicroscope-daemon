@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cd /usr/local/src/netmicroscope-daemon/
+. venv/bin/activate
+venv/bin/python3 nmd $@

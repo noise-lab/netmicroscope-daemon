@@ -1,0 +1,9 @@
+Package: netmicroscope-daemon
+Version: 0.9.8
+Section: custom
+Priority: optional
+Architecture: all
+Essential: no
+Installed-Size: 1024
+Maintainer: ggmartins
+Description: NetMicroscope Backend Integration Agent (linux daemon).
