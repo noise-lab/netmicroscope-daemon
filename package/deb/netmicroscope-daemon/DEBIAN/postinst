@@ -1,0 +1,4 @@
+#!/bin/bash
+
+chmod +x /etc/init.d/netmicroscope-daemon
+update-rc.d netmicroscope-daemon defaults
