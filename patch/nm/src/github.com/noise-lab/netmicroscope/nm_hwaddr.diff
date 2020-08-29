@@ -1,0 +1,158 @@
+diff --git build.sh build.sh
+index c643f01..03193de 100755
+--- build.sh
++++ build.sh
+@@ -4,7 +4,7 @@ PROJECT=$(basename $(dirname $(readlink -f $0)))
+ NAMES=$(ls cmd/* -d | xargs -n1 basename)
+ for NAME in $NAMES; do
+     OSES=${OSS:-"linux"}
+-    ARCHS=${ARCHS:-"amd64"}
++    ARCHS=${ARCHS:-"arm64"}
+     for ARCH in $ARCHS; do
+         for OS in $OSES; do
+             echo $OS $ARCH $NAME
+diff --git internal/flowstats/flow.go internal/flowstats/flow.go
+index 07a8b17..8db77cb 100644
+--- internal/flowstats/flow.go
++++ internal/flowstats/flow.go
+@@ -32,7 +32,7 @@ type GeneralFlow struct {
+ 	Protocol    string
+ 	LocalPort   string
+ 	ServicePort string
+-
++	HwAddr      string
+ 	Cntrs PacketCounters
+ }
+ 
+@@ -80,7 +80,7 @@ type TCPFlow struct {
+ 	Protocol    string
+ 	LocalPort   string
+ 	ServicePort string
+-
++	HwAddr      string
+ 	Cntrs    PacketCounters
+ 	TCPCntrs TCPState
+ }
+@@ -132,7 +132,7 @@ type VideoFlow struct {
+ 	Protocol    string
+ 	LocalPort   string
+ 	ServicePort string
+-
++	HwAddr      string
+ 	Cntrs    PacketCounters
+ 	VidCntrs VideoCounters
+ }
+@@ -183,7 +183,7 @@ type TCPVideoFlow struct {
+ 	Protocol    string
+ 	LocalPort   string
+ 	ServicePort string
+-
++	HwAddr      string
+ 	Cntrs    PacketCounters
+ 	TCPCntrs TCPState
+ 	VidCntrs VideoCounters
+@@ -238,7 +238,7 @@ type VoIPFlow struct {
+ 	Protocol    string
+ 	LocalPort   string
+ 	ServicePort string
+-
++	HwAddr      string
+ 	Cntrs   PacketCounters
+ 	LJCntrs LatencyJitterCounter
+ }
+diff --git internal/flowstats/flowcache.go internal/flowstats/flowcache.go
+index 4d38999..6998c64 100644
+--- internal/flowstats/flowcache.go
++++ internal/flowstats/flowcache.go
+@@ -86,6 +86,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow.DomainName = dName
+ 			flow.ServiceIP = pkt.ServiceIP
+ 			flow.LocalIP = pkt.MyIP
++			flow.HwAddr = pkt.HwAddr
+ 			if pkt.IsTCP {
+ 				flow.Protocol = "tcp"
+ 			} else {
+@@ -103,6 +104,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow.DomainName = dName
+ 			flow.ServiceIP = pkt.ServiceIP
+ 			flow.LocalIP = pkt.MyIP
++			flow.HwAddr = pkt.HwAddr
+ 			if pkt.IsTCP {
+ 				flow.Protocol = "tcp"
+ 			} else {
+@@ -120,6 +122,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow.DomainName = dName
+ 			flow.ServiceIP = pkt.ServiceIP
+ 			flow.LocalIP = pkt.MyIP
++			flow.HwAddr = pkt.HwAddr
+ 			if pkt.IsTCP {
+ 				flow.Protocol = "tcp"
+ 			} else {
+@@ -138,6 +141,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow.DomainName = dName
+ 			flow.ServiceIP = pkt.ServiceIP
+ 			flow.LocalIP = pkt.MyIP
++			flow.HwAddr = pkt.HwAddr
+ 			if pkt.IsTCP {
+ 				flow.Protocol = "tcp"
+ 			} else {
+@@ -155,6 +159,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow.DomainName = dName
+ 			flow.ServiceIP = pkt.ServiceIP
+ 			flow.LocalIP = pkt.MyIP
++			flow.HwAddr = pkt.HwAddr
+ 			if pkt.IsTCP {
+ 				flow.Protocol = "tcp"
+ 			} else {
+diff --git internal/stats/cachedump.go internal/stats/cachedump.go
+index bbdb7d8..4186e34 100644
+--- internal/stats/cachedump.go
++++ internal/stats/cachedump.go
+@@ -30,6 +30,7 @@ type VideoChunksOut struct {
+ type OutTraffic struct {
+ 	Meta      string
+ 	Device    string
++	HwAddr    string
+ 	Flow      string
+ 	Domain    string
+ 	Proto     string
+@@ -188,6 +189,7 @@ func (cp *CachePrinter) StatsOut(outDir string, baseName string, fc *flowstats.F
+ 					if t.Cntrs.InCounter > 0 || t.Cntrs.OutCounter > 0 {
+ 						out.Meta = t.Service
+ 						out.Device = t.LocalIP
++						out.HwAddr = t.HwAddr
+ 						out.Flow = key
+ 						out.Domain = t.DomainName
+ 						out.Proto = t.Protocol
+@@ -205,6 +207,7 @@ func (cp *CachePrinter) StatsOut(outDir string, baseName string, fc *flowstats.F
+ 					if t.Cntrs.InCounter > 0 || t.Cntrs.OutCounter > 0 {
+ 						out.Meta = t.Service
+ 						out.Device = t.LocalIP
++						out.HwAddr = t.HwAddr
+ 						out.Flow = key
+ 						out.Domain = t.DomainName
+ 						out.Proto = t.Protocol
+@@ -228,6 +231,7 @@ func (cp *CachePrinter) StatsOut(outDir string, baseName string, fc *flowstats.F
+ 					if t.Cntrs.InCounter > 0 || t.Cntrs.OutCounter > 0 {
+ 						out.Meta = t.Service
+ 						out.Device = t.LocalIP
++						out.HwAddr = t.HwAddr
+ 						out.Flow = key
+ 						out.Domain = t.DomainName
+ 						out.Proto = t.Protocol
+@@ -250,6 +254,7 @@ func (cp *CachePrinter) StatsOut(outDir string, baseName string, fc *flowstats.F
+ 					if t.Cntrs.InCounter > 0 || t.Cntrs.OutCounter > 0 {
+ 						out.Meta = t.Service
+ 						out.Device = t.LocalIP
++						out.HwAddr = t.HwAddr
+ 						out.Flow = key
+ 						out.Domain = t.DomainName
+ 						out.Proto = t.Protocol
+@@ -269,6 +274,7 @@ func (cp *CachePrinter) StatsOut(outDir string, baseName string, fc *flowstats.F
+ 					if t.Cntrs.InCounter > 0 || t.Cntrs.OutCounter > 0 {
+ 						out.Meta = t.Service
+ 						out.Device = t.LocalIP
++						out.HwAddr = t.HwAddr
+ 						out.Flow = key
+ 						out.Domain = t.DomainName
+ 						out.Proto = t.Protocol
