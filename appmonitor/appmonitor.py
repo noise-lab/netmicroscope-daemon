@@ -180,16 +180,22 @@ class AppMonitor:
               for d in j['TrafficData']['Data']:
                 #self.printF(d['Device']+' '+d['Meta']+' KbpsDw:'+str(d['KbpsDw']))
                 #self.printF(d['Device']+' '+d['Meta']+' KbpsUp:'+str(d['KbpsUp']))
-                if d['Device'] not in summary:
-                  summary[d['Device']] = {}
-                if d['Meta'] not in summary[d['Device']]:
-                    summary[d['Device']][d['Meta']] = { 'KbpsDw': 0.0, 'KbpsUp': 0.0, 'TsEnd': 0 }
+                device = 'Device'
+                if 'HwAddr' in d:
+                    device = 'HwAddr'
+                #self.printF(d['Device']+' '+d['Meta']+' KbpsDw:'+str(d['KbpsDw']))
+                #self.printF(d['Device']+' '+d['Meta']+' KbpsUp:'+str(d['KbpsUp']))
+                if d[device] not in summary:
+                  summary[d[device]] = {}
+                if d['Meta'] not in summary[d[device]]:
+                    summary[d[device]][d['Meta']] = { 'KbpsDw': 0.0, 'KbpsUp': 0.0, 'TsEnd': 0 }
   
-                summary[d['Device']][d['Meta']]['TsEnd'] = j['Info']['TsEnd']
-                summary[d['Device']][d['Meta']]['KbpsDw'] =\
-                    summary[d['Device']][d['Meta']]['KbpsDw'] + d['KbpsDw']
-                summary[d['Device']][d['Meta']]['KbpsUp'] =\
-                    summary[d['Device']][d['Meta']]['KbpsUp'] + d['KbpsUp']
+                summary[d[device]][d['Meta']]['TsEnd'] = j['Info']['TsEnd']
+                summary[d[device]][d['Meta']]['KbpsDw'] =\
+                    summary[d[device]][d['Meta']]['KbpsDw'] + d['KbpsDw']
+                summary[d[device]][d['Meta']]['KbpsUp'] =\
+                    summary[d[device]][d['Meta']]['KbpsUp'] + d['KbpsUp']
+
               self.influxdb.influxdb_queue.put(summary)
 
               for dev in summary.keys():
