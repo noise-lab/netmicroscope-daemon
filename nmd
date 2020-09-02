@@ -122,6 +122,7 @@ def daemon_debug(args):
 def daemon_status(args):
     if hasattr(args, 'verbose'):
       if args.verbose:
+        print("INFO: pwd={}".format(os.getcwd()))
         print("INFO: {0} Status arguments: {1}".format(PROGNAME, args))
     if os.path.exists(pidpath):
       print("INFO: Daemon is running")

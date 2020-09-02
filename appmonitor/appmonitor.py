@@ -11,6 +11,8 @@ import queue
 import urllib
 import urllib.parse
 import urllib.request
+import imp
+import os
 
 from dotenv import load_dotenv
 
@@ -23,18 +25,38 @@ class AppMonitor:
   influxdb = None 
   logger = None
   listener = None
-
-  def __init__(self, thread_ctrl, logger = None):
-    load_dotenv(verbose=True)
-    self.thread_ctrl = thread_ctrl
-    self.influxdb = self.InfluxDB(self.printF, self.thread_ctrl)
-    self.logger = logger
+  pluginfolder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "./plugins")
+  mainmodule = "module"
 
   def printF (self, m):
     if self.logger:
       self.logger.info(m)
     else:
       print(m)
+
+  def __init__(self, thread_ctrl, logger = None):
+    load_dotenv(verbose=True)
+    self.thread_ctrl = thread_ctrl
+    self.influxdb = self.InfluxDB(self.printF, self.thread_ctrl)
+    self.logger = logger
+    for i in self.getPlugins():
+       self.printF("Loading plugin " + i["name"])
+       plugin = self.loadPlugin(i)
+       plugin.run()
+
+  def getPlugins(self):
+    plugins = []
+    pluginsdir = os.listdir(self.pluginfolder)
+    for p in pluginsdir:
+        location = os.path.join(self.pluginfolder, p)
+        if not os.path.isdir(location) or not self.mainmodule + ".py" in os.listdir(location):
+            continue
+        info = imp.find_module(self.mainmodule, [location])
+        plugins.append({"name": p, "info": info})
+    return plugins
+
+  def loadPlugin(self, plugin):
+    return imp.load_module(self.mainmodule, *plugin["info"])
 
   class InfluxDB(object):
     host = None
@@ -178,13 +200,9 @@ class AppMonitor:
               if j['TrafficData']['Data'] is None:
                 continue
               for d in j['TrafficData']['Data']:
-                #self.printF(d['Device']+' '+d['Meta']+' KbpsDw:'+str(d['KbpsDw']))
-                #self.printF(d['Device']+' '+d['Meta']+' KbpsUp:'+str(d['KbpsUp']))
                 device = 'Device'
                 if 'HwAddr' in d:
                     device = 'HwAddr'
-                #self.printF(d['Device']+' '+d['Meta']+' KbpsDw:'+str(d['KbpsDw']))
-                #self.printF(d['Device']+' '+d['Meta']+' KbpsUp:'+str(d['KbpsUp']))
                 if d[device] not in summary:
                   summary[d[device]] = {}
                 if d['Meta'] not in summary[d[device]]:
