@@ -51,14 +51,14 @@ class AppMonitor:
     pluginsdir = os.listdir(self.pluginfolder)
     for p in pluginsdir:
         location = os.path.join(self.pluginfolder, p)
-        if not os.path.isdir(location) or not self.mainmodule + ".py" in os.listdir(location):
+        if not os.path.isdir(location) or not p + ".py" in os.listdir(location):
             continue
-        info = imp.find_module(self.mainmodule, [location])
+        info = imp.find_module(p, [location])
         plugins.append({"name": p, "info": info})
     return plugins
 
   def loadPlugin(self, plugin):
-    return imp.load_module(self.mainmodule, *plugin["info"])
+    return imp.load_module(plugin["name"], *plugin["info"])
 
   def pluginPreProcess(self, insertData):
     for p in self.plugins:

@@ -20,8 +20,9 @@ ouiurl=[
 ]
 
 def init(printFunc=print):
+  global oui
   printF = printFunc
-  if path.exists(ouidatpath):
+  if not path.exists(ouidatpath):
     os.mkdir(ouidatpath)
   if path.exists(ouipkl):
     oui = pickle.load(open(ouipkl,'rb'))
@@ -48,7 +49,7 @@ def preprocess(data):
   if oui is None:
     printF("ouimap: ERROR oui dict not initialized")
     return data
-  for k in oui.keys()[:10]:
+  for k in oui.keys():
     printF(k)
   return data
 
