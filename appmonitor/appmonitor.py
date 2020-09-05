@@ -100,6 +100,9 @@ class AppMonitor:
           if self.header == None:
             self.header = {'Authorization': 'Token ' + self.userw + ":" + self.passw}
           insert = pluginPreProcess(self.influxdb_queue.get())
+          for dev in insert.keys():
+                for app in insert[dev]:
+                  self.printF(app + "-" + dev + " " + str(insert[dev][app]))
           try:
             data = ''
             for dev in insert.keys():
@@ -223,9 +226,9 @@ class AppMonitor:
 
               self.influxdb.influxdb_queue.put(summary)
 
-              for dev in summary.keys():
-                for app in summary[dev]:
-                  self.printF(app + "-" + dev + " " + str(summary[dev][app]))
+              #for dev in summary.keys():
+              #  for app in summary[dev]:
+              #    self.printF(app + "-" + dev + " " + str(summary[dev][app]))
 
           except sh.SignalException_SIGKILL as e:
               self.printF("process_tmp_ta: tail terminated " + filename)

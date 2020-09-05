@@ -9,5 +9,5 @@ def init(printFunc=print):
   printF("hello plugin init")
 
 def preprocess(data):
-  printF("hello plugin preprocess")
+  #printF("hello plugin preprocess")
   return data

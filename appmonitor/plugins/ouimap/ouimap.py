@@ -45,13 +45,28 @@ def init(printFunc=print):
   printF("Module OUI mapping initialized (ouimap)")
 
 def preprocess(data):
-  printF("ouimap: preprocessing")
+  #printF("ouimap: preprocessing")
+  ddata = {}
   if oui is None:
     printF("ouimap: ERROR oui dict not initialized")
     return data
-  for k in oui.keys():
-    printF(k)
-  return data
+  for dev in data.keys():
+    try:
+       ddata[transform(oui[dev[:8]])+dev[-2]+dev[-1]] = data[dev]
+    except KeyError:
+       ddata[dev[:8]+"_"+dev[-2]+dev[-1]] = data[dev]
+  return ddata
+
+def transform(str):
+  str = str.replace(" ", "_")
+  str = str.replace(".", "_")
+  str = str.replace(",", "_")
+  str = str.replace("___", "_")
+  str = str.replace("__", "_")
+  str = str.replace("_-_", "-")
+  if str[-1] != '_':
+    str = str + "_"
+  return str
 
 def generate_oui_dict():
     oui = {}
