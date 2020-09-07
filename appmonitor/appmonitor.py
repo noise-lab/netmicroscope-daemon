@@ -11,6 +11,8 @@ import queue
 import urllib
 import urllib.parse
 import urllib.request
+import imp
+import os
 
 from dotenv import load_dotenv
 
@@ -23,18 +25,45 @@ class AppMonitor:
   influxdb = None 
   logger = None
   listener = None
-
-  def __init__(self, thread_ctrl, logger = None):
-    load_dotenv(verbose=True)
-    self.thread_ctrl = thread_ctrl
-    self.influxdb = self.InfluxDB(self.printF, self.thread_ctrl)
-    self.logger = logger
+  pluginfolder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugins")
+  mainmodule = "module"
+  plugins = []
 
   def printF (self, m):
     if self.logger:
       self.logger.info(m)
     else:
       print(m)
+
+  def __init__(self, thread_ctrl, logger = None):
+    load_dotenv(verbose=True)
+    self.thread_ctrl = thread_ctrl
+    self.influxdb = self.InfluxDB(self.printF, self.thread_ctrl)
+    self.logger = logger
+    for p in self.getPlugins():
+       self.printF("Loading plugin " + p["name"])
+       plugin = self.loadPlugin(p)
+       plugin.init(self.printF)
+       self.plugins.append(plugin)
+
+  def getPlugins(self):
+    plugins = []
+    pluginsdir = os.listdir(self.pluginfolder)
+    for p in pluginsdir:
+        location = os.path.join(self.pluginfolder, p)
+        if not os.path.isdir(location) or not p + ".py" in os.listdir(location):
+            continue
+        info = imp.find_module(p, [location])
+        plugins.append({"name": p, "info": info})
+    return plugins
+
+  def loadPlugin(self, plugin):
+    return imp.load_module(plugin["name"], *plugin["info"])
+
+  def pluginPreProcess(self, insertData):
+    for p in self.plugins:
+      insertData = p.preprocess(insertData)
+    return insertData
 
   class InfluxDB(object):
     host = None
@@ -63,14 +92,17 @@ class AppMonitor:
     def printF(self, m):
       self.printFunc(m)
 
-    def influxdb_updater_thread(self):
+    def influxdb_updater_thread(self, pluginPreProcess):
       while self.thread_ctrl['continue']:
           if self.url == None:
             self.url = "https://" + self.host + ":" + self.port + "/api/v2/write?bucket=" +\
               self.database + "/rp&precision=ns"
           if self.header == None:
             self.header = {'Authorization': 'Token ' + self.userw + ":" + self.passw}
-          insert = self.influxdb_queue.get()
+          insert = pluginPreProcess(self.influxdb_queue.get())
+          for dev in insert.keys():
+                for app in insert[dev]:
+                  self.printF(app + "-" + dev + " " + str(insert[dev][app]))
           try:
             data = ''
             for dev in insert.keys():
@@ -178,13 +210,9 @@ class AppMonitor:
               if j['TrafficData']['Data'] is None:
                 continue
               for d in j['TrafficData']['Data']:
-                #self.printF(d['Device']+' '+d['Meta']+' KbpsDw:'+str(d['KbpsDw']))
-                #self.printF(d['Device']+' '+d['Meta']+' KbpsUp:'+str(d['KbpsUp']))
                 device = 'Device'
                 if 'HwAddr' in d:
                     device = 'HwAddr'
-                #self.printF(d['Device']+' '+d['Meta']+' KbpsDw:'+str(d['KbpsDw']))
-                #self.printF(d['Device']+' '+d['Meta']+' KbpsUp:'+str(d['KbpsUp']))
                 if d[device] not in summary:
                   summary[d[device]] = {}
                 if d['Meta'] not in summary[d[device]]:
@@ -198,9 +226,9 @@ class AppMonitor:
 
               self.influxdb.influxdb_queue.put(summary)
 
-              for dev in summary.keys():
-                for app in summary[dev]:
-                  self.printF(app + "-" + dev + " " + str(summary[dev][app]))
+              #for dev in summary.keys():
+              #  for app in summary[dev]:
+              #    self.printF(app + "-" + dev + " " + str(summary[dev][app]))
 
           except sh.SignalException_SIGKILL as e:
               self.printF("process_tmp_ta: tail terminated " + filename)
@@ -249,7 +277,9 @@ class AppMonitor:
          self.printF("ERROR: INFLUXDB_DB not set, Exiting...")
          sys.exit(1)
 
-       threading.Thread(target=self.influxdb.influxdb_updater_thread, daemon=True).start()
+       threading.Thread(target=self.influxdb.influxdb_updater_thread, 
+          args=(self.pluginPreProcess,),
+          daemon=True).start()
        self.printF("INFO: Done")
     #try:
     #  with open(self.FILESTATUS, 'rb') as handle:
