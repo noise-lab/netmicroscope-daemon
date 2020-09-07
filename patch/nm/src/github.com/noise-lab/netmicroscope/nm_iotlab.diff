@@ -61,49 +61,137 @@ index 07a8b17..8db77cb 100644
  	LJCntrs LatencyJitterCounter
  }
 diff --git internal/flowstats/flowcache.go internal/flowstats/flowcache.go
-index 4d38999..6998c64 100644
+index 4d38999..1527b7b 100644
 --- internal/flowstats/flowcache.go
 +++ internal/flowstats/flowcache.go
-@@ -86,6 +86,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
- 			flow.DomainName = dName
+@@ -64,16 +64,17 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 		fc.cache.SetAndUnlock(*hash, flow)
+ 	} else {
+ 		//Query dns cache for the flow type
+-		var sName, dName string
++		var sName, dName, qName string
+ 		var sType uint8
+ 		if s, t := fc.dnsCache.Lookup(pkt.ServiceIP); t == true {
+ 			sName = s.Name
+ 			dName = s.Domain
++			qName = s.Query
+ 			sType = s.Type
+ 			s.LastUsed = pkt.TStamp
+ 			fc.dnsCache.Insert(pkt.ServiceIP, s)
+ 		} else {
+-			sName, dName, sType = fc.dnsCache.CheckPrefix(pkt.ServiceIP, pkt.TStamp)
++			sName, dName, qName, sType = fc.dnsCache.CheckPrefix(pkt.ServiceIP, pkt.TStamp)
+ 		}
+ 
+ 		// Create a new flow based on type
+@@ -83,9 +84,10 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow.Reset()
+ 			flow.Id = *hash
+ 			flow.Service = sName
+-			flow.DomainName = dName
++			flow.DomainName = (map[bool]string{true: dName, false: qName})[dName != ""]
  			flow.ServiceIP = pkt.ServiceIP
  			flow.LocalIP = pkt.MyIP
 +			flow.HwAddr = pkt.HwAddr
  			if pkt.IsTCP {
  				flow.Protocol = "tcp"
  			} else {
-@@ -103,6 +104,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
- 			flow.DomainName = dName
+@@ -100,9 +102,10 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow := CreateVideoFlow()
+ 			flow.Id = *hash
+ 			flow.Service = sName
+-			flow.DomainName = dName
++			flow.DomainName = (map[bool]string{true: dName, false: qName})[dName != ""]
  			flow.ServiceIP = pkt.ServiceIP
  			flow.LocalIP = pkt.MyIP
 +			flow.HwAddr = pkt.HwAddr
  			if pkt.IsTCP {
  				flow.Protocol = "tcp"
  			} else {
-@@ -120,6 +122,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
- 			flow.DomainName = dName
+@@ -117,9 +120,10 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow := CreateTCPVideoFlow()
+ 			flow.Id = *hash
+ 			flow.Service = sName
+-			flow.DomainName = dName
++			flow.DomainName = (map[bool]string{true: dName, false: qName})[dName != ""]
  			flow.ServiceIP = pkt.ServiceIP
  			flow.LocalIP = pkt.MyIP
 +			flow.HwAddr = pkt.HwAddr
  			if pkt.IsTCP {
  				flow.Protocol = "tcp"
  			} else {
-@@ -138,6 +141,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
- 			flow.DomainName = dName
+@@ -135,9 +139,10 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow.Reset()
+ 			flow.Id = *hash
+ 			flow.Service = sName
+-			flow.DomainName = dName
++			flow.DomainName = (map[bool]string{true: dName, false: qName})[dName != ""]
  			flow.ServiceIP = pkt.ServiceIP
  			flow.LocalIP = pkt.MyIP
 +			flow.HwAddr = pkt.HwAddr
  			if pkt.IsTCP {
  				flow.Protocol = "tcp"
  			} else {
-@@ -155,6 +159,7 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
- 			flow.DomainName = dName
+@@ -152,9 +157,10 @@ func (fc *FlowCache) addPacket(pkt *network.Packet, hash *string) error {
+ 			flow := CreateGeneralFlow()
+ 			flow.Id = *hash
+ 			flow.Service = sName
+-			flow.DomainName = dName
++			flow.DomainName = (map[bool]string{true: dName, false: qName})[dName != ""]
  			flow.ServiceIP = pkt.ServiceIP
  			flow.LocalIP = pkt.MyIP
 +			flow.HwAddr = pkt.HwAddr
  			if pkt.IsTCP {
  				flow.Protocol = "tcp"
  			} else {
+diff --git internal/network/dns.go internal/network/dns.go
+index 212e98c..efa7f74 100644
+--- internal/network/dns.go
++++ internal/network/dns.go
+@@ -39,6 +39,7 @@ type CName struct {
+ type IpMap struct {
+ 	Name     string
+ 	Domain   string
++	Query    string
+ 	Type     uint8
+ 	Expire   int64
+ 	LastUsed int64
+@@ -138,22 +139,22 @@ func (dc *DNSCache) stopCacheTimer() {
+ }
+ 
+ // Lookup the cached DNS entries for possible matches
+-func (dc *DNSCache) CheckPrefix(sIp string, pTs int64) (string, string, uint8) {
++func (dc *DNSCache) CheckPrefix(sIp string, pTs int64) (string, string, string, uint8) {
+ 	ip := net.ParseIP(sIp)
+ 	for _, s := range dc.Services {
+ 		for _, n := range s.PrefixNets {
+ 			if n.Contains(ip) {
+ 				dc.Lock()
+-				dc.IpLookup[sIp] = IpMap{Name: s.Name, Domain: n.String(), Type: s.ServiceType, Expire: pTs + dc.EvictTime, LastUsed: pTs}
++				dc.IpLookup[sIp] = IpMap{Name: s.Name, Domain: n.String(), Query: n.String(), Type: s.ServiceType, Expire: pTs + dc.EvictTime, LastUsed: pTs}
+ 				dc.Unlock()
+-				return s.Name, n.String(), s.ServiceType
++				return s.Name, n.String(), n.String(), s.ServiceType
+ 			}
+ 		}
+ 	}
+ 	dc.Lock()
+ 	dc.IpLookup[sIp] = IpMap{Name: Unknown, Expire: pTs + dc.EvictTime, LastUsed: pTs, Type: TrafficTypeGeneric}
+ 	dc.Unlock()
+-	return Unknown, "", TrafficTypeGeneric
++	return Unknown, "", "", TrafficTypeGeneric
+ }
+ 
+ // Matches a DNS response to the configured services.
+@@ -208,7 +209,7 @@ func (dc *DNSCache) ParseDnsResponse(dns layers.DNS, pTs int64) {
+ 			}
+ 		}
+ 		if a.IP != nil {
+-			dc.Insert(a.IP.String(), IpMap{Name: sName, Domain: dName, Type: sType, Expire: pTs + int64(a.TTL), LastUsed: pTs})
++			dc.Insert(a.IP.String(), IpMap{Name: sName, Domain: dName, Query: string(dns.Questions[:1][0].Name), Type: sType, Expire: pTs + int64(a.TTL), LastUsed: pTs})
+ 		}
+ 	}
+ }
 diff --git internal/stats/cachedump.go internal/stats/cachedump.go
 index bbdb7d8..4186e34 100644
 --- internal/stats/cachedump.go
