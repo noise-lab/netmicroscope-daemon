@@ -99,10 +99,19 @@ class AppMonitor:
               self.database + "/rp&precision=ns"
           if self.header == None:
             self.header = {'Authorization': 'Token ' + self.userw + ":" + self.passw}
-          insert = pluginPreProcess(self.influxdb_queue.get())
+          summary = pluginPreProcess(self.influxdb_queue.get())
+          if summary is None:
+            continue
+          if 'std' not in summary.keys():
+            self.printF("WARNING: malformed summary/insert data {0}".format(summary))
+            continue
+          else:
+            insert = summary['std']
+            self.printF("EXTINFO: {}".format(summary['ext']))
           for dev in insert.keys():
-                for app in insert[dev]:
-                  self.printF(app + "-" + dev + " " + str(insert[dev][app]))
+            if insert[dev] is not None:
+              for app in insert[dev]:
+                 self.printF(app + "-" + dev + " " + str(insert[dev][app]))
           try:
             data = ''
             for dev in insert.keys():
@@ -126,7 +135,7 @@ class AppMonitor:
             with urllib.request.urlopen(req) as response:
                self.printF('OK' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
           except Exception as e:
-              self.printF("EXCEPTION: influxdb_updater_thread {0}".format(e))
+              self.printF("EXCEPTION: influxdb_updater_thread {0} {1}".format(e, dev))
           self.influxdb_queue.task_done()
 
   class TAHandler():
@@ -202,7 +211,7 @@ class AppMonitor:
           try:
               line = self.filestatus[filename]['tail'].next()
               j=json.loads(line)
-              summary = {}
+              summary = {'std' : {}, 'ext': {}} #std == standard, ext == extended (rDNS. GeoIP, etc)
               if 'TrafficData' not in j.keys():
                 continue
               if 'Data' not in j['TrafficData'].keys():
@@ -213,17 +222,21 @@ class AppMonitor:
                 device = 'Device'
                 if 'HwAddr' in d:
                     device = 'HwAddr'
-                if d[device] not in summary:
-                  summary[d[device]] = {}
-                if d['Meta'] not in summary[d[device]]:
-                    summary[d[device]][d['Meta']] = { 'KbpsDw': 0.0, 'KbpsUp': 0.0, 'TsEnd': 0 }
+                if d[device] not in summary['std']:
+                  summary['std'][d[device]] = {}
+                  summary['ext'][d[device]] = {}
+                if d['Meta'] not in summary['std'][d[device]]:
+                    summary['std'][d[device]][d['Meta']] = { 'KbpsDw': 0.0, 'KbpsUp': 0.0, 'TsEnd': 0 }
+                    summary['ext'][d[device]][d['Meta']] = { 'Domain': None, 'SIP': None }
   
-                summary[d[device]][d['Meta']]['TsEnd'] = j['Info']['TsEnd']
-                summary[d[device]][d['Meta']]['KbpsDw'] =\
-                    summary[d[device]][d['Meta']]['KbpsDw'] + d['KbpsDw']
-                summary[d[device]][d['Meta']]['KbpsUp'] =\
-                    summary[d[device]][d['Meta']]['KbpsUp'] + d['KbpsUp']
-
+                summary['std'][d[device]][d['Meta']]['TsEnd'] = j['Info']['TsEnd']
+                summary['std'][d[device]][d['Meta']]['KbpsDw'] =\
+                    summary['std'][d[device]][d['Meta']]['KbpsDw'] + d['KbpsDw']
+                summary['std'][d[device]][d['Meta']]['KbpsUp'] =\
+                    summary['std'][d[device]][d['Meta']]['KbpsUp'] + d['KbpsUp']
+                summary['std'][d[device]][d['Meta']]['Domain'] = d['Domain']
+                summary['std'][d[device]][d['Meta']]['SIP'] = d['SIP']
+                #self.printF("DOMAIN:" + d['Domain'] + "," + d['SIP'])
               self.influxdb.influxdb_queue.put(summary)
 
               #for dev in summary.keys():
@@ -234,7 +247,9 @@ class AppMonitor:
               self.printF("process_tmp_ta: tail terminated " + filename)
               break
           except Exception as e:
-              self.printF("TMPHandler: {0}".format(e))
+              exc_type, exc_obj, exc_tb = sys.exc_info()
+              fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+              self.printF("TMPHandler: {0} {1} {2}".format(exc_type, fname, exc_tb.tb_lineno))
 
         self.printF('process_tmp_ta: exiting ' + filename)
         #with open(FILESTATUS, 'wb') as handle:
@@ -307,8 +322,7 @@ class AppMonitor:
             pass 
     except KeyboardInterrupt:
       self.stop()
-    self.printF("MAIN: observer join")
-    #self.observer.join()
+    self.printF("MAIN: listener join")
     self.listener.join()
     self.influxdb.influxdb_queue.join()
 
@@ -318,7 +332,7 @@ class AppMonitor:
           self.filestatus[k]['tail'].kill()
       except ProcessLookupError: # as ple:
           pass
-    self.observer.stop()
+    self.listener.stop()
 
 #if __name__ == "__main__":
 #  app = AppMonitor()

@@ -5,3 +5,5 @@ export INFLUXDB_WRITE_USER=influxagent
 export INFLUXDB_WRITE_USER_PASSWORD=
 export INFLUXDB_DEPLOYMENT=
 export INFLUXDB_DB=nmdb
+export MMGEOIP_ID=
+export MMGEOIP_KEY=

@@ -63,14 +63,13 @@ def main_thread(args, mainctrl):
       log.info("ARGS:{0}".format(args))
     try:
       app = AppMonitor(mainctrl.thread_ctrl, log)
-      app.run()
       mainctrl.thread_ctrl['app'] = app
+      app.run()
     except KeyboardInterrupt: # as ke:
       if verbose:
         log.warning("Interrupting...") 
     except Exception as e:
-      if verbose:
-        log.error("Exception:{0}".format(str(e)))
+      log.error("Exception:{0}".format(str(e)))
     log.info("Exiting...")
      
 

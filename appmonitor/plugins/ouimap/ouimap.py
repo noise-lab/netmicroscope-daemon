@@ -50,12 +50,16 @@ def preprocess(data):
   if oui is None:
     printF("ouimap: ERROR oui dict not initialized")
     return data
-  for dev in data.keys():
-    try:
-       ddata[transform(oui[dev[:8]])+dev[-2]+dev[-1]] = data[dev]
-    except KeyError:
-       ddata[dev[:8]+"_"+dev[-2]+dev[-1]] = data[dev]
-  return ddata
+  if data is None:
+    return data
+  if 'std' in data.keys() and data['std'] is not None:
+    for dev in data['std'].keys():
+      try:
+        ddata[transform(oui[dev[:8]])+dev[-2]+dev[-1]] = data['std'][dev]
+      except KeyError:
+        ddata[dev[:8]+"_"+dev[-2]+dev[-1]] = data['std'][dev]
+  data['std'] = ddata
+  return data
 
 def transform(str):
   str = str.replace(" ", "_")
