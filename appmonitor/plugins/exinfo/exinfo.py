@@ -10,6 +10,7 @@ import time
 from geoip2.errors import *
 
 """Extended info about TCP/IP connections (GeoIP, rDNS, DNS)"""
+PLUGIN_PRIORITY = 2
 
 printF = print
 exinfopath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -218,6 +219,7 @@ def init(printFunc=print):
   global exinfo
   printF = printFunc
   exinfo = ExInfo(exinfopath, extpkl)
+  return PLUGIN_PRIORITY
 
 def preprocess(data):
   device = None
@@ -237,6 +239,7 @@ def preprocess(data):
             device = dev
           if 'Domain' in data['std'][dev][app].keys():
             query = data['std'][dev][app]['Domain']
+    #printF("DEVICE:{}".format(device))
     if sip is not None and query is not None:
         if not exinfo.isblacklisted(device):
            ddata = exinfo.query(sip, query)

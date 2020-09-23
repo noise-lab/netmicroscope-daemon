@@ -6,6 +6,7 @@ import urllib.request
 import re
 
 """OUI mac address to manufacturer mapping"""
+PLUGIN_PRIORITY = 1
 
 printF = print
 ouidatpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -41,8 +42,8 @@ def init(printFunc=print):
           printF("ouimap: ERROR {0}".format(e))
           pass
       oui = generate_oui_dict()
-
   printF("Module OUI mapping initialized (ouimap)")
+  return PLUGIN_PRIORITY
 
 def preprocess(data):
   #printF("ouimap: preprocessing")

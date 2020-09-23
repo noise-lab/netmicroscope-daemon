@@ -43,8 +43,9 @@ class AppMonitor:
     for p in self.getPlugins():
        self.printF("Loading plugin " + p["name"])
        plugin = self.loadPlugin(p)
-       plugin.init(self.printF)
-       self.plugins.append(plugin)
+       priority = plugin.init(self.printF)
+       self.plugins.append({'plugin':plugin, 'priority':priority})
+    self.plugins = sorted(self.plugins, key = lambda i: i['priority']) #,reverse=True
 
   def getPlugins(self):
     plugins = []
@@ -62,7 +63,7 @@ class AppMonitor:
 
   def pluginPreProcess(self, insertData):
     for p in self.plugins:
-      insertData = p.preprocess(insertData)
+      insertData = p['plugin'].preprocess(insertData)
     return insertData
 
   class InfluxDB(object):
