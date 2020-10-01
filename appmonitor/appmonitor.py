@@ -138,7 +138,7 @@ class AppMonitor:
             if extend is not None:
               for insertLine in extend:
                 data = data + insertLine + "\n"
-                print(insertLine)
+                #print(insertLine)
             data = data.encode()
             req = urllib.request.Request(self.url, data, self.header)
             with urllib.request.urlopen(req) as response:
@@ -251,9 +251,11 @@ class AppMonitor:
               #for dev in summary.keys():
               #  for app in summary[dev]:
               #    self.printF(app + "-" + dev + " " + str(summary[dev][app]))
-
+          except sh.ErrorReturnCode_1: # as e:
+              self.printF("process_tmp_ta: tail terminated {0}, (permission denied ?) ".format(filename))
+              break
           except sh.SignalException_SIGKILL as e:
-              self.printF("process_tmp_ta: tail terminated " + filename)
+              self.printF("process_tmp_ta: tail terminated {0}".format(filename))
               break
           except Exception as e:
               exc_type, exc_obj, exc_tb = sys.exc_info()

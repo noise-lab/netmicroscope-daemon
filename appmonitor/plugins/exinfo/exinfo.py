@@ -247,6 +247,21 @@ def f(s):
   else:
       return str(s).replace(',', '\,').replace(' ', '\ ')
 
+def connid(isp, org, city, state, device, query):
+    ret = ''
+    if len(isp) > 1:
+        ret += isp
+    elif len(org) > 1:
+        ret += isp
+    if len(city) > 1:
+        ret += "|" + city
+    if len(state) > 1:
+        ret += "," + state
+    ret += "|" + device
+    ret += "|{}".format(query)
+    return f(ret)
+
+
 def mmquery(client, ipaddr):
     try:
         response = client.city(ipaddr)
@@ -256,10 +271,10 @@ def mmquery(client, ipaddr):
             return {'err' : str(he)}, None
     except GeoIP2Error as ge:
         if ge is not None:
-            print("(GeoIP2Error) Failed to query {0}: {1}".format(ipaddr, ge))
+            printF("(GeoIP2Error) Failed to query {0}: {1}".format(ipaddr, ge))
             return {'err' : str(ge)}, None
     except Exception as e:
-        print("(Exception) Failed to query {0}: {1}".format(ipaddr, e))
+        printF("(Exception) Failed to query {0}: {1}".format(ipaddr, e))
         return {'err' : str(e)}, None
 
     #printF("Queries remaining:", response.maxmind.queries_remaining)
@@ -311,16 +326,16 @@ def preprocess(data):
                 if 'geoip' in data['ext'][device][sip].keys():
                     try:
                         insertQuery = ("geometric,lat={0},lng={1},country={2},"\
-                            "ispcity={3},device={4},query={5} metric=1 {6}"\
+                            "connid={3} metric=1 {4}"\
                             .format(data['ext'][device][sip]['geoip'][0]['lat'],\
                                 data['ext'][device][sip]['geoip'][0]['lng'],\
                                 data['ext'][device][sip]['geoip'][0]['country'],\
-                                f(data['ext'][device][sip]['geoip'][0]['isp'] if \
-                                    len(data['ext'][device][sip]['geoip'][0]['isp']) > 1 \
-                                        else data['ext'][device][sip]['geoip'][0]['org'])+"\,\ "+\
-                                        f(data['ext'][device][sip]['geoip'][0]['city']),\
-                                            device, data['ext'][device][sip]['query'],\
-                                                str(data['std'][dev][app]['TsEnd']) + '000000000'))
+                                    connid(data['ext'][device][sip]['geoip'][0]['isp'],\
+                                        data['ext'][device][sip]['geoip'][0]['org'],\
+                                            data['ext'][device][sip]['geoip'][0]['city'],\
+                                                data['ext'][device][sip]['geoip'][0]['state'],\
+                                                device, data['ext'][device][sip]['query']),\
+                                                    str(data['std'][dev][app]['TsEnd']) + '000000000'))
                         insert.append(insertQuery)
                     except KeyError:
                         #TODO: better error handling
