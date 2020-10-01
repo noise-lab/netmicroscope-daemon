@@ -108,7 +108,11 @@ class AppMonitor:
             continue
           else:
             insert = summary['std']
-            self.printF("EXTINFO: {}".format(summary['ext']))
+            extend = None
+            if 'ext' in summary.keys():
+              if 'insert' in summary['ext'].keys():
+                extend = summary['ext']['insert']
+            #self.printF("EXTINFO: {}".format(summary['ext']))
           for dev in insert.keys():
             if insert[dev] is not None:
               for app in insert[dev]:
@@ -131,6 +135,10 @@ class AppMonitor:
                   ',application=' + app +\
                   ' value=' + str(insert[dev][app]['KbpsUp']) +\
                   ' ' + str(insert[dev][app]['TsEnd']) + '000000000' + '\n'
+            if extend is not None:
+              for insertLine in extend:
+                data = data + insertLine + "\n"
+                print(insertLine)
             data = data.encode()
             req = urllib.request.Request(self.url, data, self.header)
             with urllib.request.urlopen(req) as response:

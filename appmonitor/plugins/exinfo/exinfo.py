@@ -2,6 +2,7 @@ import os, sys
 from os import path
 import geoip2.webservice
 import dns.resolver,dns.reversename
+from ipwhois import IPWhois
 import pickle
 import re
 import asyncio
@@ -28,9 +29,9 @@ ipv6re = re.compile(
 class ExInfo:
     instance = None
     
-    def __new__(cls, exinfopath, extpkl):
+    def __new__(cls, exinfopath, extpkl, debug = False):
         if not ExInfo.instance:
-            ExInfo.instance = ExInfo.__ExInfo(exinfopath, extpkl)
+            ExInfo.instance = ExInfo.__ExInfo(exinfopath, extpkl, debug)
         return ExInfo.instance
 
     def __getattr__(self, name):
@@ -40,6 +41,7 @@ class ExInfo:
         return setattr(self.instance, name, value)
 
     class __ExInfo:
+        debug = False
         client = None
         ext = None
         count = 0
@@ -47,7 +49,8 @@ class ExInfo:
         loop = None
         extpkl = None #pickle with cache resolutions
         extbls = None #black list of mac addresses
-        def __init__(self, exinfopath, extpkl): #arg TBD
+        def __init__(self, exinfopath, extpkl, debug): #arg TBD
+            self.debug = debug
             self.loop = asyncio.get_event_loop()
             threading.Thread(target=self.thread_main_loop, 
                 args=[self.lock, self.loop],
@@ -88,7 +91,6 @@ class ExInfo:
                     else:
                         blacklist.append(l)
                 self.extbls = blacklist
-                #printF("{}".format(blacklist))
 
         def __str__(self):
             return repr(self) + self.client
@@ -115,6 +117,9 @@ class ExInfo:
                 return {}
             if host.startswith("172.16."):
                 return {}
+            #TODO: all multicast addr
+            if host.startswith("239."):
+                return {}
             self.count+=1
 
             try:
@@ -122,18 +127,21 @@ class ExInfo:
                 self.ext[host]['hits']+=1
                 self.ext[host]['lts'] = time.time()
                 self.ext[host]['ltsh'] = time.ctime(time.time())
+                if self.ext[host]['hits'] > 1 and self.ext[host]['query'] =='':
+                    if 'rdns_fqdn' not in self.ext[host]:
+                        if 'whois' not in self.ext[host]:
+                            self.ext[host]['unresolved'] = host
+                        else:
+                            self.ext[host]['query'] = self.ext[host]['whois']['asn_description']
+                            
+                    else:
+                        self.ext[host]['query'] = self.ext[host]['rdns_fqdn']
+                    
                 if dnsquery is not None and self.ext[host]['query'] is None:
                     self.ext[host]['query'] = dnsquery
                 r = self.ext[host]
             except (KeyError, TypeError):
                 n = -1
-                #if(ipv4re.match(host)):
-                #    r, n = mmquery(self.client, host)
-                #elif (ipv6re.match(host)):
-                #    r, n = mmquery(self.client, host)
-                #else:
-                    #TODO query hostname
-                #async with self.lock:
                 r = {}
                 r['hits'] = 1
                 r['query'] = dnsquery
@@ -144,7 +152,25 @@ class ExInfo:
                 pass
             
             if 'rdns_fqdn' not in self.ext[host].keys():
-                asyncio.run_coroutine_threadsafe(self.task_resolve_rdns(self.ext, host, self.lock), self.loop)
+                if self.ext[host]['hits'] > 10 :
+                    if self.debug:
+                      printF("WARNING rdns_fqdn for {0}".format(host))
+                else:
+                    asyncio.run_coroutine_threadsafe(self.task_resolve_rdns(self.ext, host, self.lock), self.loop)
+
+            if 'whois' not in self.ext[host].keys():
+                if self.ext[host]['hits'] > 10 :
+                    if self.debug:
+                      printF("WARNING whois for {0}".format(host))
+                else:
+                    asyncio.run_coroutine_threadsafe(self.task_resolve_whois(self.ext, host, self.lock), self.loop)
+
+            if 'geoip' not in self.ext[host].keys():
+                if self.ext[host]['hits'] > 10 :
+                    if self.debug:
+                      printF("WARNING geoip for {0}".format(host))
+                else:
+                    asyncio.run_coroutine_threadsafe(self.task_resolve_geoip(self.ext, host, self.lock), self.loop)
             
             if self.count % 5 == 0: #save pickle every 25 (5x5) seconds
                 asyncio.run_coroutine_threadsafe(self.task_save(self.ext, self.lock), self.loop)
@@ -157,16 +183,45 @@ class ExInfo:
 
         async def task_resolve_rdns(self, ext, host, lock):
             async with lock:
-              ext[host]['rdns_fqdn'] = \
-                    [str(a) for a in dns.resolver.resolve(dns.reversename.from_address(host),"PTR")]
-        
+              try:
+                ext[host]['rdns_fqdn'] = \
+                        [str(a) for a in dns.resolver.resolve(dns.reversename.from_address(host),"PTR")]
+                if ext[host]['query'] == '':
+                    ext[host]['query'] = ext[host]['rdns_fqdn'][0]
+              except Exception as e:
+                  if self.debug:
+                    printF("task_resolve_rdns {}".format(e))
+                  pass
+
+        async def task_resolve_whois(self, ext, host, lock):
+            async with lock:
+              try:
+                ext[host]['whois'] = IPWhois(host).lookup_whois()
+              except Exception as e:
+                if self.debug:
+                  printF("task_resolve_whois {}".format(e))
+                pass
+
+        async def task_resolve_geoip(self, ext, host, lock):
+            async with lock:
+              try:
+                ext[host]['geoip'] = mmquery(self.client, host)
+              except Exception as e:
+                if self.debug:
+                  printF("task_resolve_geoip {}".format(e))
+                pass
+
         async def task_save(self, ext, lock):
              async with lock:
                 try:
                     with open(extpkl, 'wb') as f:
                         pickle.dump(ext, f, protocol=pickle.HIGHEST_PROTOCOL)
                 except Exception as e:
+                  if self.debug:
                     printF("task_save: Exception {}".format(e))
+                  pass
+
+
 
 exinfo = None
 
@@ -186,6 +241,12 @@ def i(i):
          printF("ERROR: mmquery.i {0}".format(e))
          return -1
 
+def f(s):
+  if s is None:
+      return ''
+  else:
+      return str(s).replace(',', '\,').replace(' ', '\ ')
+
 def mmquery(client, ipaddr):
     try:
         response = client.city(ipaddr)
@@ -201,7 +262,7 @@ def mmquery(client, ipaddr):
         print("(Exception) Failed to query {0}: {1}".format(ipaddr, e))
         return {'err' : str(e)}, None
 
-    printF("Queries remaining:", response.maxmind.queries_remaining)
+    #printF("Queries remaining:", response.maxmind.queries_remaining)
     return {'ip': ipaddr, 'city': s(response.city.name),
             'state': s(response.subdivisions.most_specific.iso_code),
             'country': s(response.country.iso_code),
@@ -226,7 +287,7 @@ def preprocess(data):
   sip = None
   query = None
   ddata = None
-  
+  insert = []
   if data is None:
       return data
 
@@ -240,12 +301,32 @@ def preprocess(data):
           if 'Domain' in data['std'][dev][app].keys():
             query = data['std'][dev][app]['Domain']
     #printF("DEVICE:{}".format(device))
-    if sip is not None and query is not None:
-        if not exinfo.isblacklisted(device):
-           ddata = exinfo.query(sip, query)
-        #else:
-        #   printF("DEVICE BLACKLISTED:{}".format(device))
-  data['ext'] = ddata
+          if sip is not None and query is not None:
+            if not exinfo.isblacklisted(device):
+                ddata = exinfo.query(sip, query)
+                #else:
+                #   printF("DEVICE BLACKLISTED:{}".format(device))
+                data['ext'][device] = { sip : ddata }
+                insertQuery = ''
+                if 'geoip' in data['ext'][device][sip].keys():
+                    try:
+                        insertQuery = ("geometric,lat={0},lng={1},country={2},"\
+                            "ispcity={3},device={4},query={5} metric=1 {6}"\
+                            .format(data['ext'][device][sip]['geoip'][0]['lat'],\
+                                data['ext'][device][sip]['geoip'][0]['lng'],\
+                                data['ext'][device][sip]['geoip'][0]['country'],\
+                                f(data['ext'][device][sip]['geoip'][0]['isp'] if \
+                                    len(data['ext'][device][sip]['geoip'][0]['isp']) > 1 \
+                                        else data['ext'][device][sip]['geoip'][0]['org'])+"\,\ "+\
+                                        f(data['ext'][device][sip]['geoip'][0]['city']),\
+                                            device, data['ext'][device][sip]['query'],\
+                                                str(data['std'][dev][app]['TsEnd']) + '000000000'))
+                        insert.append(insertQuery)
+                    except KeyError:
+                        #TODO: better error handling
+                        #printF("Key Error {0} {1}".format(device, sip))
+                        pass
+  data['ext']['insert'] = insert
   return data
 
 def test_query(sip, query):
