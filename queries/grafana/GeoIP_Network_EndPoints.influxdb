@@ -1,0 +1,2 @@
+SELECT "metric" as "metric",  "lat", "lng", "connid" FROM "geometric" where time > now() - 24h
+

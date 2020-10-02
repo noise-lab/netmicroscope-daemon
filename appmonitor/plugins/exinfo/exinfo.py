@@ -326,7 +326,7 @@ def preprocess(data):
                 if 'geoip' in data['ext'][device][sip].keys():
                     try:
                         insertQuery = ("geometric,lat={0},lng={1},country={2},"\
-                            "connid={3} metric=1 {4}"\
+                            "connid={3},device={4} metric=1 {5}"\
                             .format(data['ext'][device][sip]['geoip'][0]['lat'],\
                                 data['ext'][device][sip]['geoip'][0]['lng'],\
                                 data['ext'][device][sip]['geoip'][0]['country'],\
@@ -335,6 +335,7 @@ def preprocess(data):
                                             data['ext'][device][sip]['geoip'][0]['city'],\
                                                 data['ext'][device][sip]['geoip'][0]['state'],\
                                                 device, data['ext'][device][sip]['query']),\
+                                                    device,\
                                                     str(data['std'][dev][app]['TsEnd']) + '000000000'))
                         insert.append(insertQuery)
                     except KeyError:
