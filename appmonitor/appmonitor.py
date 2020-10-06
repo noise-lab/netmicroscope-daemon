@@ -40,10 +40,46 @@ class AppMonitor:
     self.thread_ctrl = thread_ctrl
     self.influxdb = self.InfluxDB(self.printF, self.thread_ctrl)
     self.logger = logger
+    if os.getenv('INFLUXDB_ENABLE') == 'true':
+      self.printF("INFO: influxdb enabled, checking environment variables...")
+      if os.getenv('INFLUXDB_HOST') is not None:
+        self.influxdb.host = os.getenv('INFLUXDB_HOST')
+      else:
+        self.printF("ERROR: INFLUXDB_HOST not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('INFLUXDB_PORT') != 0:
+        self.influxdb.port = os.getenv('INFLUXDB_PORT')
+      else:
+        self.printF("ERROR: INFLUXDB_PORT not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('INFLUXDB_WRITE_USER') is not None:
+        self.influxdb.userw = os.getenv('INFLUXDB_WRITE_USER')
+      else:
+        self.printF("ERROR: INFLUXDB_WRITE_USER not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('INFLUXDB_WRITE_USER_PASSWORD') is not None:
+        self.influxdb.passw = os.getenv('INFLUXDB_WRITE_USER_PASSWORD')
+      else:
+        self.printF("ERROR: INFLUXDB_WRITE_USER_PASSWORD not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('INFLUXDB_DEPLOYMENT') is not None:
+        self.influxdb.deployment = os.getenv('INFLUXDB_DEPLOYMENT')
+      else:
+        self.printF("ERROR: INFLUXDB_DEPLOYMENT not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('INFLUXDB_DB') is not None:
+        self.influxdb.database = os.getenv('INFLUXDB_DB')
+      else:
+        self.printF("ERROR: INFLUXDB_DB not set, Exiting...")
+        sys.exit(1)
+  
     for p in self.getPlugins():
        self.printF("Loading plugin " + p["name"])
        plugin = self.loadPlugin(p)
-       priority = plugin.init(self.printF)
+       priority, errmsg = plugin.init(self.printF, {'deployment': self.influxdb.deployment})
+       if priority < 0:
+         self.printF(errmsg)
+         sys.exit(1)
        self.plugins.append({'plugin':plugin, 'priority':priority})
     self.plugins = sorted(self.plugins, key = lambda i: i['priority']) #,reverse=True
 
@@ -89,7 +125,7 @@ class AppMonitor:
       self.influxdb_queue = queue.Queue()
       self.printFunc = printF
       self.thread_ctrl = thread_ctrl
-    
+
     def printF(self, m):
       self.printFunc(m)
 
@@ -258,9 +294,9 @@ class AppMonitor:
               self.printF("process_tmp_ta: tail terminated {0}".format(filename))
               break
           except Exception as e:
-              exc_type, exc_obj, exc_tb = sys.exc_info()
+              exc_type, _, exc_tb = sys.exc_info()
               fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-              self.printF("TMPHandler: {0} {1} {2}".format(exc_type, fname, exc_tb.tb_lineno))
+              self.printF("process_tmp_ta: {0} {1} {2}".format(exc_type, fname, exc_tb.tb_lineno))
 
         self.printF('process_tmp_ta: exiting ' + filename)
         #with open(FILESTATUS, 'wb') as handle:
@@ -271,38 +307,7 @@ class AppMonitor:
     self.listener = self.TAHandler(self.process_tmp_ta, self.printF, self.filestatus, self.thread_ctrl)
     self.listener.start()
     if os.getenv('INFLUXDB_ENABLE') == 'true':
-       self.printF("INFO: influxdb enabled, checking environment variables...")
-       if os.getenv('INFLUXDB_HOST') is not None:
-         self.influxdb.host = os.getenv('INFLUXDB_HOST')
-       else:
-         self.printF("ERROR: INFLUXDB_HOST not set, Exiting...")
-         sys.exit(1)
-       if os.getenv('INFLUXDB_PORT') != 0:
-         self.influxdb.port = os.getenv('INFLUXDB_PORT')
-       else:
-         self.printF("ERROR: INFLUXDB_PORT not set, Exiting...")
-         sys.exit(1)
-       if os.getenv('INFLUXDB_WRITE_USER') is not None:
-         self.influxdb.userw = os.getenv('INFLUXDB_WRITE_USER')
-       else:
-         self.printF("ERROR: INFLUXDB_WRITE_USER not set, Exiting...")
-         sys.exit(1)
-       if os.getenv('INFLUXDB_WRITE_USER_PASSWORD') is not None:
-         self.influxdb.passw = os.getenv('INFLUXDB_WRITE_USER_PASSWORD')
-       else:
-         self.printF("ERROR: INFLUXDB_WRITE_USER_PASSWORD not set, Exiting...")
-         sys.exit(1)
-       if os.getenv('INFLUXDB_DEPLOYMENT') is not None:
-         self.influxdb.deployment = os.getenv('INFLUXDB_DEPLOYMENT')
-       else:
-         self.printF("ERROR: INFLUXDB_DEPLOYMENT not set, Exiting...")
-         sys.exit(1)
-       if os.getenv('INFLUXDB_DB') is not None:
-         self.influxdb.database = os.getenv('INFLUXDB_DB')
-       else:
-         self.printF("ERROR: INFLUXDB_DB not set, Exiting...")
-         sys.exit(1)
-
+       self.printF("INFO: running thread.")
        threading.Thread(target=self.influxdb.influxdb_updater_thread, 
           args=(self.pluginPreProcess,),
           daemon=True).start()

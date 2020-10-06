@@ -13,6 +13,7 @@ from geoip2.errors import *
 """Extended info about TCP/IP connections (GeoIP, rDNS, DNS)"""
 PLUGIN_PRIORITY = 2
 
+config = None
 printF = print
 exinfopath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 extpkl = os.path.join(exinfopath, "exinfo.pkl")
@@ -291,11 +292,15 @@ def mmquery(client, ipaddr):
             'ASnum': i(response.traits.autonomous_system_number),
             'ASorg': s(response.traits.autonomous_system_organization)}, response.maxmind.queries_remaining
 
-def init(printFunc=print):
+def init(printFunc=print, conf=None):
   global exinfo
+  global config
   printF = printFunc
+  config = conf
+  if 'deployment' not in config.keys():
+      return -1, "deployment key not configured"
   exinfo = ExInfo(exinfopath, extpkl)
-  return PLUGIN_PRIORITY
+  return PLUGIN_PRIORITY, "ok"
 
 def preprocess(data):
   device = None
@@ -325,9 +330,10 @@ def preprocess(data):
                 insertQuery = ''
                 if 'geoip' in data['ext'][device][sip].keys():
                     try:
-                        insertQuery = ("geometric,lat={0},lng={1},country={2},"\
-                            "connid={3},device={4} metric=1 {5}"\
-                            .format(data['ext'][device][sip]['geoip'][0]['lat'],\
+                        insertQuery = ("geometric,deployment={0},lat={1},lng={2},country={3},"\
+                            "connid={4},device={5} metric=1 {6}"\
+                            .format(config['deployment'],\
+                                data['ext'][device][sip]['geoip'][0]['lat'],\
                                 data['ext'][device][sip]['geoip'][0]['lng'],\
                                 data['ext'][device][sip]['geoip'][0]['country'],\
                                     connid(data['ext'][device][sip]['geoip'][0]['isp'],\

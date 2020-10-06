@@ -4,11 +4,13 @@ import logging
 PLUGIN_PRIORITY = 0
 
 printF = print
+config = None
 
-def init(printFunc=print):
+def init(printFunc=print, conf = None):
   printF = printFunc
-  printF("hello plugin init")
-  return PLUGIN_PRIORITY
+  config = None
+  printF("hello plugin init with {0}".format(config))
+  return PLUGIN_PRIORITY, "ok"
 
 def preprocess(data):
   #printF("hello plugin preprocess")

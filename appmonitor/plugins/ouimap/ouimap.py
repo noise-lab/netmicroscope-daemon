@@ -1,4 +1,4 @@
-import os
+import os, sys
 from os import path
 import logging
 import pickle
@@ -13,6 +13,7 @@ ouidatpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 ouitxt = os.path.join(ouidatpath, "oui.txt")
 ouipkl = os.path.join(ouidatpath, "oui.pkl")
 
+config = None
 oui = None
 
 ouiurl=[
@@ -20,13 +21,19 @@ ouiurl=[
   "http://standards-oui.ieee.org/oui/oui.txt"
 ]
 
-def init(printFunc=print):
+def init(printFunc=print, conf=None):
   global oui
   printF = printFunc
+  config = conf
   if not path.exists(ouidatpath):
     os.mkdir(ouidatpath)
   if path.exists(ouipkl):
-    oui = pickle.load(open(ouipkl,'rb'))
+    try:
+      oui = pickle.load(open(ouipkl,'rb'))
+    except Exception as e:
+      exc_type, _, exc_tb = sys.exc_info()
+      fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+      return -1, "ouimap: ({0}) {1} {2} {3}".format(str(e), exc_type, fname, exc_tb.tb_lineno)
   else:
     if not path.exists(ouitxt):
       for url in ouiurl:
@@ -42,8 +49,8 @@ def init(printFunc=print):
           printF("ouimap: ERROR {0}".format(e))
           pass
       oui = generate_oui_dict()
-  printF("Module OUI mapping initialized (ouimap)")
-  return PLUGIN_PRIORITY
+  printF("Module OUI mapping initialized (ouimap) with {0}".format(config))
+  return PLUGIN_PRIORITY, "ok"
 
 def preprocess(data):
   #printF("ouimap: preprocessing")
