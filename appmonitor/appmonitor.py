@@ -110,7 +110,8 @@ class AppMonitor:
     passw = None
     deployment = None
     database = None
-    thread_ctrl = None 
+    thread_ctrl = None
+    insert_memory = None
 
     #var built at runtime
     url = None
@@ -155,6 +156,7 @@ class AppMonitor:
                  self.printF(app + "-" + dev + " " + str(insert[dev][app]))
           try:
             data = ''
+            TsEnd = None
             for dev in insert.keys():
               for app in insert[dev]:
                 data = data + 'network_traffic_application_kbpsdw'+\
@@ -163,14 +165,36 @@ class AppMonitor:
                   ',application=' + app +\
                   ' value=' + str(insert[dev][app]['KbpsDw']) +\
                   ' ' + str(insert[dev][app]['TsEnd']) + '000000000' + '\n'
-            for dev in insert.keys():
-              for app in insert[dev]:
                 data = data + 'network_traffic_application_kbpsup'+\
                   ',deployment=' + self.deployment +\
                   ',device=' + dev +\
                   ',application=' + app +\
                   ' value=' + str(insert[dev][app]['KbpsUp']) +\
                   ' ' + str(insert[dev][app]['TsEnd']) + '000000000' + '\n'
+                TsEnd = str(insert[dev][app]['TsEnd']) 
+
+            if self.insert_memory is not None:
+              try:
+                for dev in self.insert_memory.keys():
+                  for app in self.insert_memory[dev]:
+                    insert[dev][app]['KbpsDw']
+                    insert[dev][app]['KbpsUp']
+              except KeyError:
+                data = data + 'network_traffic_application_kbpsdw'+\
+                  ',deployment=' + self.deployment +\
+                  ',device=' + dev +\
+                  ',application=' + app +\
+                  ' value=0' +\
+                  ' ' + TsEnd + '000000000' + '\n'
+                data = data + 'network_traffic_application_kbpsup'+\
+                  ',deployment=' + self.deployment +\
+                  ',device=' + dev +\
+                  ',application=' + app +\
+                  ' value=0' +\
+                  ' ' + TsEnd + '000000000' + '\n'
+
+            self.insert_memory = insert
+
             if extend is not None:
               for insertLine in extend:
                 data = data + insertLine + "\n"
