@@ -18,6 +18,7 @@ printF = print
 exinfopath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 extpkl = os.path.join(exinfopath, "exinfo.pkl")
 extbls = os.path.join(exinfopath, "exinfo.bls")
+extwls = os.path.join(exinfopath, "exinfo.wls")
 
 #lift from https://gist.github.com/mnordhoff/2213179
 ipv4re = re.compile(
@@ -50,6 +51,7 @@ class ExInfo:
         loop = None
         extpkl = None #pickle with cache resolutions
         extbls = None #black list of mac addresses
+        extwls = None #white list of mac addresses
         def __init__(self, exinfopath, extpkl, debug): #arg TBD
             self.debug = debug
             self.loop = asyncio.get_event_loop()
@@ -92,6 +94,16 @@ class ExInfo:
                     else:
                         blacklist.append(l)
                 self.extbls = blacklist
+            if path.exists(extwls):
+                with open(extwls, 'r') as f:
+                    self.extwls = f.readlines()
+                whitelist = []
+                for l in self.extwls:
+                    if l[-1] == '\n':
+                        whitelist.append(l[:-1])
+                    else:
+                        whitelist.append(l)
+                self.extwls = whitelist
 
         def __str__(self):
             return repr(self) + self.client
@@ -105,6 +117,11 @@ class ExInfo:
             if self.extbls is not None:
                 return device in self.extbls
             return False
+
+        def iswhitelisted(self, device):
+            if self.extwls is None:
+                return True
+            return device in self.extwls
 
         def query(self, host, dnsquery): #host can be ipaddr or not
             r = None # result
@@ -134,7 +151,6 @@ class ExInfo:
                             self.ext[host]['unresolved'] = host
                         else:
                             self.ext[host]['query'] = self.ext[host]['whois']['asn_description']
-                            
                     else:
                         self.ext[host]['query'] = self.ext[host]['rdns_fqdn']
                     
@@ -321,8 +337,14 @@ def preprocess(data):
           if 'Domain' in data['std'][dev][app].keys():
             query = data['std'][dev][app]['Domain']
     #printF("DEVICE:{}".format(device))
+          do_insert = False
           if sip is not None and query is not None:
-            if not exinfo.isblacklisted(device):
+            if exinfo.iswhitelisted(device):
+                do_insert = True
+            if exinfo.isblacklisted(device): #black list overrides wls
+                do_insert = False
+
+            if do_insert:
                 ddata = exinfo.query(sip, query)
                 #else:
                 #   printF("DEVICE BLACKLISTED:{}".format(device))
