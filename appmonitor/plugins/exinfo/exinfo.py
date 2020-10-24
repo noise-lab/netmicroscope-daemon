@@ -1,14 +1,17 @@
 import os, sys
 from os import path
 import geoip2.webservice
-import dns.resolver,dns.reversename
+import dns.resolver, dns.reversename
 from ipwhois import IPWhois
 import pickle
+import random
 import re
 import asyncio
 import threading
 import time
+from datetime import datetime
 from geoip2.errors import *
+from appmonitor.plugins.exinfo.exinfodb import GeoIP, Whois, Rdns, ExInfoDB, Ext
 
 """Extended info about TCP/IP connections (GeoIP, rDNS, DNS)"""
 PLUGIN_PRIORITY = 2
@@ -52,6 +55,7 @@ class ExInfo:
         extpkl = None #pickle with cache resolutions
         extbls = None #black list of mac addresses
         extwls = None #white list of mac addresses
+        exinfodb = ExInfoDB()
         def __init__(self, exinfopath, extpkl, debug): #arg TBD
             self.debug = debug
             self.loop = asyncio.get_event_loop()
@@ -123,122 +127,123 @@ class ExInfo:
                 return True
             return device in self.extwls
 
-        def query(self, host, dnsquery): #host can be ipaddr or not
-            r = None # result
+        def query(self, host, dnsquery, device): #host can be ipaddr or not
             if host is None:
                 return
             if host.startswith("127.0.0.1"):
-                return {}
+                return
             if host.startswith("10."):
-                return {}
+                return
             if host.startswith("192.168."):
-                return {}
+                return
             if host.startswith("172.16."):
-                return {}
+                return
             #TODO: all multicast addr
             if host.startswith("239."):
-                return {}
+                return
             self.count+=1
 
-            try:
-                #async with self.lock:
-                self.ext[host]['hits']+=1
-                self.ext[host]['lts'] = time.time()
-                self.ext[host]['ltsh'] = time.ctime(time.time())
-                if self.ext[host]['hits'] > 1 and self.ext[host]['query'] =='':
-                    if 'rdns_fqdn' not in self.ext[host]:
-                        if 'whois' not in self.ext[host]:
-                            self.ext[host]['unresolved'] = host
-                        else:
-                            self.ext[host]['query'] = self.ext[host]['whois']['asn_description']
-                    else:
-                        self.ext[host]['query'] = self.ext[host]['rdns_fqdn']
-                    
-                if dnsquery is not None and self.ext[host]['query'] is None:
-                    self.ext[host]['query'] = dnsquery
-                r = self.ext[host]
-            except (KeyError, TypeError):
-                n = -1
-                r = {}
-                r['hits'] = 1
-                r['query'] = dnsquery
-                r['qr'] = n #queries remaining
-                r['ts'] = time.time()
-                r['tsh'] = time.ctime(time.time())
-                self.ext[host] = r
-                pass
-            
-            if 'rdns_fqdn' not in self.ext[host].keys():
-                if self.ext[host]['hits'] > 10 :
-                    if self.debug:
-                      printF("WARNING rdns_fqdn for {0}".format(host))
-                else:
-                    asyncio.run_coroutine_threadsafe(self.task_resolve_rdns(self.ext, host, self.lock), self.loop)
+            ext = [Ext(host=host,query=dnsquery,\
+                device=device, hits=0, qr=-1, ts=datetime.utcnow())]
+            ext1, err1 = self.exinfodb.insertEx(ext)
+            if err1 is not None:
+                ok, err2 = self.exinfodb.hitAndUpdate(host, dnsquery)
+                if not ok and err2 is not None:
+                    printF("WARNING: insertEx:{0}/hitAndUpdate:{1}".format(err1, err2))
+                #else:
+                    #print("{}".format(exinfodb.getEx("200.10.10.1")[0]))
 
-            if 'whois' not in self.ext[host].keys():
-                if self.ext[host]['hits'] > 10 :
-                    if self.debug:
-                      printF("WARNING whois for {0}".format(host))
+            if isinstance(ext1, list):
+                if len(ext1) > 0:
+                   printF("WARNING: insertEx returned multiple elements") #TODO: is this really needed?
+                   ext1 = ext1[0]
                 else:
-                    asyncio.run_coroutine_threadsafe(self.task_resolve_whois(self.ext, host, self.lock), self.loop)
+                   printF("WARNING: insertEx failed to insert {0}".format(ext1))
 
-            if 'geoip' not in self.ext[host].keys():
-                if self.ext[host]['hits'] > 10 :
-                    if self.debug:
-                      printF("WARNING geoip for {0}".format(host))
-                else:
-                    asyncio.run_coroutine_threadsafe(self.task_resolve_geoip(self.ext, host, self.lock), self.loop)
-            
-            if self.count % 5 == 0: #save pickle every 25 (5x5) seconds
-                asyncio.run_coroutine_threadsafe(self.task_save(self.ext, self.lock), self.loop)
-            
-            return r
+            if ext1 is not None:
+                if not ext1.has_rdns:
+                    asyncio.run_coroutine_threadsafe(self.task_resolve_rdns(self.ext, host, ext1, self.lock), self.loop)
+
+            if ext1 is not None:
+                if not ext1.has_whois:
+                    asyncio.run_coroutine_threadsafe(self.task_resolve_whois(self.ext, host, ext1, self.lock), self.loop)
+
+            if ext1 is not None:
+                if not ext1.has_geoip:
+                    asyncio.run_coroutine_threadsafe(self.task_resolve_geoip(self.ext, host, ext1, self.lock), self.loop)
+            return ext1
         
         def thread_main_loop(self, lock, loop):
             loop.run_forever()
             loop.close()
 
-        async def task_resolve_rdns(self, ext, host, lock):
+        async def task_resolve_rdns(self, ext, host, ext1, lock):
             async with lock:
-              try:
-                ext[host]['rdns_fqdn'] = \
-                        [str(a) for a in dns.resolver.resolve(dns.reversename.from_address(host),"PTR")]
-                if ext[host]['query'] == '':
-                    ext[host]['query'] = ext[host]['rdns_fqdn'][0]
-              except Exception as e:
-                  if self.debug:
-                    printF("task_resolve_rdns {}".format(e))
-                  pass
-
-        async def task_resolve_whois(self, ext, host, lock):
-            async with lock:
-              try:
-                ext[host]['whois'] = IPWhois(host).lookup_whois()
-              except Exception as e:
-                if self.debug:
-                  printF("task_resolve_whois {}".format(e))
-                pass
-
-        async def task_resolve_geoip(self, ext, host, lock):
-            async with lock:
-              try:
-                ext[host]['geoip'] = mmquery(self.client, host)
-              except Exception as e:
-                if self.debug:
-                  printF("task_resolve_geoip {}".format(e))
-                pass
-
-        async def task_save(self, ext, lock):
-             async with lock:
                 try:
-                    with open(extpkl, 'wb') as f:
-                        pickle.dump(ext, f, protocol=pickle.HIGHEST_PROTOCOL)
+                   rdns_host=[str(a) for a in dns.resolver.resolve(dns.reversename.from_address(host),"PTR")]
+                   if (ext1.query is None or ext1.query == '') and len(rdns_host) > 0:
+                        self.exinfodb.updateExQuery(ext1, rdns_host[0])
+                   _, err = self.exinfodb.updateEx(ext1,\
+                   Rdns(host=ext1.host,\
+                        info="{}".format(rdns_host)))
+                   print("RDNS: host:{0}, device:{1}, org:{2    }, query:{3} rdns:{4}"\
+                            .format(host, ext1.host, ext1.device,\
+                                 ext1.query, rdns_host))
+                   if err is not None:
+                     printF("WARNING: task_resolve_rdns unable to update/insert ({0})".format(err))
                 except Exception as e:
                   if self.debug:
-                    printF("task_save: Exception {}".format(e))
-                  pass
+                    printF("task_resolve_rdns {}".format(e))
 
+        async def task_resolve_whois(self, ext, host, ext1, lock):
+            async with lock:
+                try:
+                    whois = IPWhois(host).lookup_whois()
+                    if whois is not None:
+                        if 'asn_description' in whois.keys():
+                            _, err = self.exinfodb.updateEx(ext1,\
+                                Whois(host=ext1.host,\
+                                    info="{}".format(whois['asn_description'])))
+                            if err is not None:
+                                printF("WARNING: task_resolve_whois unable to update/inser ({0})".format(err))
+                        else:
+                            printF("WARNING: task_resolve_whois unable to resolve ({0})".format(host))
+                except Exception as e:
+                    if self.debug:
+                        printF("task_resolve_whois {}".format(e))
 
+        async def task_resolve_geoip(self, ext, host, ext1, lock):
+            async with lock:
+                try:
+                    geoip, qr = mmquery(self.client, host)
+                    if geoip is not None:
+                        print("GEOIP: host:{0}, device:{1}, org:{2}, query:{3} city:{4}"\
+                            .format(host,ext1.device,\
+                                 geoip['org'], ext1.query, geoip['city']))
+                        if str(geoip['lat']) == "37.751" and str(geoip['lng'])== "-97.822":
+                            geoip['lat'] += random.randint(-100, 100)
+                            geoip['lng'] += random.randint(-100, 100)
+                        _, err = self.exinfodb.updateEx(ext1,\
+                                GeoIP(host=ext1.host,\
+                                        city = geoip['city'],\
+                                        state = geoip['state'],\
+                                        country = geoip['country'],\
+                                        continent = geoip['continent'],\
+                                        lat = geoip['lat'],\
+                                        lng = geoip['lng'],\
+                                        isp = geoip['isp'],\
+                                        org = geoip['org'],\
+                                        domain = geoip['domain'],\
+                                        conntype = geoip['conntype'],\
+                                        asnum = geoip['ASnum'],\
+                                        asorg = geoip['ASorg']), qr)
+                        if err is not None:
+                            printF("WARNING: task_resolve_geoip unable to update/inser ({0})".format(err))
+                    else:
+                        printF("WARNING: task_resolve_geoip unable to resolve ({0})".format(host))
+                except Exception as e:
+                    if self.debug:
+                        printF("task_resolve_geoip {}".format(e))
 
 exinfo = None
 
@@ -322,8 +327,8 @@ def preprocess(data):
   device = None
   sip = None
   query = None
-  ddata = None
   insert = []
+  timestamp = None
   if data is None:
       return data
 
@@ -338,6 +343,7 @@ def preprocess(data):
             query = data['std'][dev][app]['Domain']
     #printF("DEVICE:{}".format(device))
           do_insert = False
+          timestamp = str(data['std'][dev][app]['TsEnd'])
           if sip is not None and query is not None:
             if exinfo.iswhitelisted(device):
                 do_insert = True
@@ -345,9 +351,54 @@ def preprocess(data):
                 do_insert = False
 
             if do_insert:
-                ddata = exinfo.query(sip, query)
+                e = exinfo.query(sip, query, device)
+                if e is None:
+                    print("WARNING: exinfo.query null")
+                    continue    
+                geoip, whois, rdns = exinfo.exinfodb.getExInfo(e.host)
+
                 #else:
                 #   printF("DEVICE BLACKLISTED:{}".format(device))
+
+                #print("{0}, geoip:{1}, whois:{2}, rdns:{3}".format(e, geoip, whois, rdns))
+
+                if not e.query: # and e.hits > 0:
+                    if rdns is not None:
+                        if not rdns.info:
+                            e.query = rdns.info
+                            _, err = exinfo.exinfodb.updateExQuery(e, rdns.info)
+                            if err is not None:
+                                printF("WARNING: do_insert - unable to update query field (rdns)")
+                    if not e.query:
+                        if whois is not None:
+                            if not whois.info:
+                                e.query = whois.info
+                                _, err = exinfo.exinfodb.updateExQuery(e, whois.info)
+                                if err is not None:
+                                    printF("WARNING: do_insert - unable to update query field (whois)")
+
+                if geoip is None:
+                    print("WARNING: insertQuery geoip null, query: {0}:{1}", e.host, e.query)
+                    continue
+
+                #TODO: consider disabling the following
+                try:
+                    insertQuery = ("geometric,deployment={0},lat={1},lng={2},country={3},"\
+                        "connid={4},device={5},hits={6} metric=1 {7}"\
+                        .format(config['deployment'],\
+                            geoip.lat, geoip.lng, geoip.country,\
+                                connid(geoip.isp, geoip.org,\
+                                    geoip.city, geoip.state,\
+                                        device, e.query),\
+                                            device, e.hits,\
+                                            timestamp + '000000000'))
+                    #print(insertQuery)
+                    insert.append(insertQuery)
+                except KeyError:
+                    #TODO: better error handling
+                    #printF("Key Error {0} {1}".format(device, sip))
+                    pass
+                '''
                 data['ext'][device] = { sip : ddata }
                 insertQuery = ''
                 if 'geoip' in data['ext'][device][sip].keys():
@@ -370,6 +421,36 @@ def preprocess(data):
                         #TODO: better error handling
                         #printF("Key Error {0} {1}".format(device, sip))
                         pass
+                '''
+  
+  pending = None
+  try:
+      pending = exinfo.exinfodb.getExPending()
+  except Exception as e:
+      printF("WARNING exinfo.exinfodb.getExPending:{0}".format(e))
+  if pending is not None:
+    for p in pending:
+        print("PENDING: {0}, {1}/{2}/{3}".format(p['ext'], p['geoip'], p['whois'], p['rdns']))
+        try:
+            if p['geoip'] is None:
+                continue
+            else:
+                e = p['ext']
+                geoip = p['geoip']
+            insertQuery = ("geometric,deployment={0},lat={1},lng={2},country={3},"\
+                "connid={4},device={5},hits={6} metric=1 {7}"\
+                .format(config['deployment'],\
+                    geoip.lat, geoip.lng, geoip.country,\
+                        connid(geoip.isp, geoip.org,\
+                            geoip.city, geoip.state,\
+                                e.device, e.query),\
+                                    e.device, e.hits,\
+                                    timestamp + '000000000'))
+            #print(insertQuery)
+            insert.append(insertQuery)
+        except KeyError:
+            #TODO: better error handling
+            pass
   data['ext']['insert'] = insert
   return data
 
