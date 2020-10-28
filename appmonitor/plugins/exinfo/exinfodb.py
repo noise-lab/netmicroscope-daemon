@@ -177,35 +177,36 @@ class ExInfoDB: # Extended Info
             return True, "Not found"
         query = None
 
-        if ex.query is None or ex.query == '':
-           if dnsquery is not None:
-               query = dnsquery
-           elif ex.has_rdns:
-                rdns = session.query(Rdns).filter_by(host=ex.host).all()
-                query = rdns[0].info
-           else:
-                if ex.has_whois:
-                    whois = session.query(Whois).filter_by(host=ex.host).all()
-                    query = whois[0].info
-                #else:
-                #    query = "unresolved"
-
-        if query is None:
-            session.query(Ext).filter_by(host=ex.host).update({
-                'hits' : ex.hits + 1,
-                'lts' : datetime.utcnow()
-            })
-        else:
-            session.query(Ext).filter_by(host=ex.host).update({
-                'hits' : ex.hits + 1,
-                'lts' : datetime.utcnow(),
-                'query' : query
-            })
         try:
+            if ex.query is None or ex.query == '':
+                if dnsquery is not None:
+                    query = dnsquery
+                elif ex.has_rdns:
+                        rdns = session.query(Rdns).filter_by(host=ex.host).all()
+                        query = rdns[0].info
+                else:
+                        if ex.has_whois:
+                            whois = session.query(Whois).filter_by(host=ex.host).all()
+                            query = whois[0].info
+                        #else:
+                        #    query = "unresolved"
+
+            if query is None:
+                session.query(Ext).filter_by(host=ex.host).update({
+                    'hits' : ex.hits + 1,
+                    'lts' : datetime.utcnow()
+                })
+            else:
+                session.query(Ext).filter_by(host=ex.host).update({
+                    'hits' : ex.hits + 1,
+                    'lts' : datetime.utcnow(),
+                    'query' : query
+                })
+        
             session.commit()
         except Exception as err:
             session.rollback()
-            return False, err
+            return False, "({0}/{1})".format(err, host)
         return True, None
 
     def getConnection(self, connid):

@@ -12,7 +12,7 @@ from appmonitor.appmonitor import AppMonitor
 
 #TODO: move this to setup.py
 __name__ = "netmicroscope-daemon"
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 __author__ = "Guilherme Martins"
 
 PROGNAME = 'appmonitor'
