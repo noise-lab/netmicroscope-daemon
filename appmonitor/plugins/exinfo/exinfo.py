@@ -147,7 +147,9 @@ class ExInfo:
                 if len(ext1) > 0:
                    ext1 = ext1[0]
                 else:
-                   printF("WARNING: insertEx failed to insert {0}".format(ext1))
+                   retErr = "WARNING: insertEx failed to insert {0}".format(ext1)
+                   printF(retErr)
+                   return None, retErr
 
             if ext1 is not None:
                 if not ext1.has_rdns:

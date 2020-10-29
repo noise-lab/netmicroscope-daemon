@@ -96,8 +96,8 @@ class ExInfoDB: # Extended Info
                 pool.StaticPool(creator=self.session[id]['engine'].pool._creator)
            self.session[id]['session'] =\
                 Session(bind=self.session[id]['engine'])
-           Base.metadata.drop_all(self.session[id]['engine'])
-           Base.metadata.create_all(self.session[id]['engine'])
+           #Base.metadata.drop_all(self.session[id]['engine'])
+           #Base.metadata.create_all(self.session[id]['engine'])
         return self.session[id]['session']
     
     def insertConnections(self, c):

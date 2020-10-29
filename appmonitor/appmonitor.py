@@ -157,6 +157,7 @@ class AppMonitor:
           try:
             data = ''
             TsEnd = None
+            TsEndMemory = None
             for dev in insert.keys():
               for app in insert[dev]:
                 data = data + 'network_traffic_application_kbpsdw'+\
@@ -171,28 +172,51 @@ class AppMonitor:
                   ',application=' + app +\
                   ' value=' + str(insert[dev][app]['KbpsUp']) +\
                   ' ' + str(insert[dev][app]['TsEnd']) + '000000000' + '\n'
-                TsEnd = str(insert[dev][app]['TsEnd']) 
-
-            if self.insert_memory is not None:
-              try:
-                for dev in self.insert_memory.keys():
-                  for app in self.insert_memory[dev]:
-                    insert[dev][app]['KbpsDw']
+                if TsEnd is None:
+                  TsEnd = str(insert[dev][app]['TsEnd'])
+            # there's no future data point for some of the devices, better to fill in w zero
+            # otherwise grafana will connect data points directly 
+            if self.insert_memory is not None:              
+              for dev in self.insert_memory.keys():
+                for app in self.insert_memory[dev]:
+                  if TsEndMemory is None:
+                    TsEndMemory = self.insert_memory[dev][app]['TsEnd']
+                  try:
+                    insert[dev][app]['KbpsDw'] #force key error if not present
                     insert[dev][app]['KbpsUp']
-              except KeyError:
-                data = data + 'network_traffic_application_kbpsdw'+\
-                  ',deployment=' + self.deployment +\
-                  ',device=' + dev +\
-                  ',application=' + app +\
-                  ' value=0' +\
-                  ' ' + TsEnd + '000000000' + '\n'
-                data = data + 'network_traffic_application_kbpsup'+\
-                  ',deployment=' + self.deployment +\
-                  ',device=' + dev +\
-                  ',application=' + app +\
-                  ' value=0' +\
-                  ' ' + TsEnd + '000000000' + '\n'
-
+                  except KeyError:
+                    data = data + 'network_traffic_application_kbpsdw'+\
+                      ',deployment=' + self.deployment +\
+                      ',device=' + dev +\
+                      ',application=' + app +\
+                      ' value=0' +\
+                      ' ' + TsEnd + '000000000' + '\n'
+                    data = data + 'network_traffic_application_kbpsup'+\
+                      ',deployment=' + self.deployment +\
+                      ',device=' + dev +\
+                      ',application=' + app +\
+                      ' value=0' +\
+                      ' ' + TsEnd + '000000000' + '\n'
+              #there's no past data point for some of the devices, better to fill in w zero
+              #otherwise grafana will create a "long" ramp in the ts
+              for dev in insert.keys():
+                for app in insert[dev]:
+                  try:
+                      self.insert_memory[dev][app]['KbpsDw'] #force key error if not present
+                      self.insert_memory[dev][app]['KbpsUp']
+                  except KeyError:
+                    data = data + 'network_traffic_application_kbpsdw'+\
+                      ',deployment=' + self.deployment +\
+                      ',device=' + dev +\
+                      ',application=' + app +\
+                      ' value=0' +\
+                      ' ' + TsEndMemory + '000000000' + '\n'
+                    data = data + 'network_traffic_application_kbpsup'+\
+                      ',deployment=' + self.deployment +\
+                      ',device=' + dev +\
+                      ',application=' + app +\
+                      ' value=0' +\
+                      ' ' + TsEndMemory + '000000000' + '\n'
             self.insert_memory = insert
 
             if extend is not None:
