@@ -1,0 +1,3 @@
+SELECT "x" as a_x,"y" as a_y, "info" as a_info FROM "latent_space" where time > now() - 24h AND "color"='g'
+SELECT "x" as b_x,"y" as b_y, "info" as b_info FROM "latent_space" where time > now() - 24h AND "color"='r'
+SELECT "x" as c_x,"y" as c_y, "info" as c_info FROM "latent_space" where time > now() - 24h AND "color"='y'

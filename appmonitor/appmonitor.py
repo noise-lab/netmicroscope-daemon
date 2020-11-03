@@ -180,7 +180,7 @@ class AppMonitor:
               for dev in self.insert_memory.keys():
                 for app in self.insert_memory[dev]:
                   if TsEndMemory is None:
-                    TsEndMemory = self.insert_memory[dev][app]['TsEnd']
+                    TsEndMemory = str(self.insert_memory[dev][app]['TsEnd'])
                   try:
                     insert[dev][app]['KbpsDw'] #force key error if not present
                     insert[dev][app]['KbpsUp']
@@ -228,7 +228,13 @@ class AppMonitor:
             with urllib.request.urlopen(req) as response:
                self.printF('OK' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
           except Exception as e:
-              self.printF("EXCEPTION: influxdb_updater_thread {0} {1}".format(e, dev))
+              exc_type, _, exc_tb = sys.exc_info()
+              fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+              self.printF("EXCEPTION: influxdb_updater_thread: {0} {1} {2} (dev:{3}) {4}"\
+                      .format(exc_type, fname, exc_tb.tb_lineno, dev, e))
+
+
+
           self.influxdb_queue.task_done()
 
   class TAHandler():
