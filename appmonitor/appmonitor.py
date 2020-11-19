@@ -160,6 +160,10 @@ class AppMonitor:
             TsEndMemory = None
             for dev in insert.keys():
               for app in insert[dev]:
+                #if insert[dev][app]['KbpsDw'] == 0.0 and\
+                #  insert[dev][app]['KbpsUp'] == 0.0:
+                #      continue
+
                 data = data + 'network_traffic_application_kbpsdw'+\
                   ',deployment=' + self.deployment +\
                   ',device=' + dev +\
@@ -182,7 +186,10 @@ class AppMonitor:
                   if TsEndMemory is None:
                     TsEndMemory = str(self.insert_memory[dev][app]['TsEnd'])
                   try:
-                    insert[dev][app]['KbpsDw'] #force key error if not present
+                    #if float(insert[dev][app]['KbpsDw']) == 0.0 and\
+                    #   float(insert[dev][app]['KbpsUp']) == 0.0
+                            #force key error if not present
+                    insert[dev][app]['KbpsDw']
                     insert[dev][app]['KbpsUp']
                   except KeyError:
                     data = data + 'network_traffic_application_kbpsdw'+\
@@ -230,8 +237,8 @@ class AppMonitor:
           except Exception as e:
               exc_type, _, exc_tb = sys.exc_info()
               fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-              self.printF("EXCEPTION: influxdb_updater_thread: {0} {1} {2} (dev:{3}) {4}"\
-                      .format(exc_type, fname, exc_tb.tb_lineno, dev, e))
+              self.printF("EXCEPTION: influxdb_updater_thread: {0} {1} {2} (dev:{3}) {4} {5}"\
+                      .format(exc_type, fname, exc_tb.tb_lineno, dev, e, e.read().decode("utf8", 'ignore')))
 
 
 

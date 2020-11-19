@@ -12,6 +12,7 @@ import threading
 
 Base = declarative_base()
 DATA_EXINFODB = "data/exinfodb.sqlite"
+MAX_VALUES_PER_TAG = 100000 
 
 class Connection(Base):
     __tablename__ = "connection"
@@ -193,12 +194,12 @@ class ExInfoDB: # Extended Info
 
             if query is None:
                 session.query(Ext).filter_by(host=ex.host).update({
-                    'hits' : ex.hits + 1,
+                    'hits' : ex.hits + 1 if ex.hits < (MAX_VALUES_PER_TAG - 1) else MAX_VALUES_PER_TAG - 1,
                     'lts' : datetime.utcnow()
                 })
             else:
                 session.query(Ext).filter_by(host=ex.host).update({
-                    'hits' : ex.hits + 1,
+                    'hits' : ex.hits + 1 if ex.hits < (MAX_VALUES_PER_TAG - 1) else MAX_VALUES_PER_TAG - 1,
                     'lts' : datetime.utcnow(),
                     'query' : query
                 })
