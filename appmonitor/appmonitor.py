@@ -16,6 +16,12 @@ import os
 
 from dotenv import load_dotenv
 
+def f(s):
+  if s is None:
+      return ''
+  else:
+      return str(s).replace(',', '\,').replace(' ', '\ ')
+
 class AppMonitor:
   """AppMonitor"""
 
@@ -167,13 +173,13 @@ class AppMonitor:
                 data = data + 'network_traffic_application_kbpsdw'+\
                   ',deployment=' + self.deployment +\
                   ',device=' + dev +\
-                  ',application=' + app +\
+                  ',application=' + f(app) +\
                   ' value=' + str(insert[dev][app]['KbpsDw']) +\
                   ' ' + str(insert[dev][app]['TsEnd']) + '000000000' + '\n'
                 data = data + 'network_traffic_application_kbpsup'+\
                   ',deployment=' + self.deployment +\
                   ',device=' + dev +\
-                  ',application=' + app +\
+                  ',application=' + f(app) +\
                   ' value=' + str(insert[dev][app]['KbpsUp']) +\
                   ' ' + str(insert[dev][app]['TsEnd']) + '000000000' + '\n'
                 if TsEnd is None:
@@ -195,13 +201,13 @@ class AppMonitor:
                     data = data + 'network_traffic_application_kbpsdw'+\
                       ',deployment=' + self.deployment +\
                       ',device=' + dev +\
-                      ',application=' + app +\
+                      ',application=' + f(app) +\
                       ' value=0' +\
                       ' ' + TsEnd + '000000000' + '\n'
                     data = data + 'network_traffic_application_kbpsup'+\
                       ',deployment=' + self.deployment +\
                       ',device=' + dev +\
-                      ',application=' + app +\
+                      ',application=' + f(app) +\
                       ' value=0' +\
                       ' ' + TsEnd + '000000000' + '\n'
               #there's no past data point for some of the devices, better to fill in w zero
@@ -215,13 +221,13 @@ class AppMonitor:
                     data = data + 'network_traffic_application_kbpsdw'+\
                       ',deployment=' + self.deployment +\
                       ',device=' + dev +\
-                      ',application=' + app +\
+                      ',application=' + f(app) +\
                       ' value=0' +\
                       ' ' + TsEndMemory + '000000000' + '\n'
                     data = data + 'network_traffic_application_kbpsup'+\
                       ',deployment=' + self.deployment +\
                       ',device=' + dev +\
-                      ',application=' + app +\
+                      ',application=' + f(app) +\
                       ' value=0' +\
                       ' ' + TsEndMemory + '000000000' + '\n'
             self.insert_memory = insert
