@@ -12,7 +12,7 @@ from appmonitor.appmonitor import AppMonitor
 
 #TODO: move this to setup.py
 __name__ = "netmicroscope-daemon"
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __author__ = "Guilherme Martins"
 
 PROGNAME = 'appmonitor'
@@ -22,47 +22,40 @@ pidpath = os.path.join(PATHCTRL, PROGNAME + ".pid")
 parser = argparse.ArgumentParser(prog = PROGNAME)
 
 sp = parser.add_subparsers()
-sp_start = sp.add_parser('start', help='Starts %(prog)s daemon')
-sp_stop = sp.add_parser('stop', help='Stops %(prog)s daemon')
-sp_status = sp.add_parser('status', help='Show the status of %(prog)s daemon')
-sp_restart = sp.add_parser('restart', help='Restarts %(prog)s daemon')
-sp_debug = sp.add_parser('debug', help='Starts %(prog)s daemon in debug mode')
+sp_start = sp.add_parser('start', help='Starts %(prog)s daemon.')
+sp_stop = sp.add_parser('stop', help='Stops %(prog)s daemon.')
+sp_status = sp.add_parser('status', help='Show the status of %(prog)s daemon.')
+sp_restart = sp.add_parser('restart', help='Restarts %(prog)s daemon.')
+sp_debug = sp.add_parser('debug', help='Starts %(prog)s daemon in debug mode.')
+sp_kill = sp.add_parser('kill', help='Kill -9 %(prog)s daemon.')
 sp_status.add_argument('-v', '--verbose', action='store_true', help='log extra informations')
 sp_start.add_argument('-v', '--verbose', action='store_true', help='log extra informations')
 sp_debug.add_argument('-v', '--verbose', action='store_true', help='log extra informations')
+
+
 
 class MainCtrl:
   thread_ctrl = {
     'continue' : True,
   }
-  log = None
-  def getLogger(self):
-    logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s', 
-	datefmt='%Y-%m-%dT%H:%M:%S',
-        filename=logpath,
-        #filemode='w', 
-	level=logging.INFO)
-    self.log = logging.getLogger("Main")
-    return self.log
 
 mainctrl = MainCtrl()
 
 def main_thread_stop(signum=None, frame=None):
     mainctrl.thread_ctrl['continue'] = False
-    mainctrl.log.info("continue:{0}".format(mainctrl.thread_ctrl['continue']))
+    log.info("continue:{0}".format(mainctrl.thread_ctrl['continue']))
     mainctrl.thread_ctrl['app'].stop()
  
-def main_thread(args, mainctrl):
+def main_thread(args, mainctrl, log):
     verbose = False
 
     if hasattr(args, 'verbose'):
       verbose = args.verbose
 
-    log = mainctrl.getLogger()
     if verbose:
       log.info("ARGS:{0}".format(args))
     try:
-      app = AppMonitor(mainctrl.thread_ctrl, log)
+      app = AppMonitor(mainctrl.thread_ctrl)
       mainctrl.thread_ctrl['app'] = app
       app.run()
     except KeyboardInterrupt: # as ke:
@@ -94,7 +87,15 @@ def daemon_start(args=None):
           },
           pidfile = daemon.pidfile.PIDLockFile(pidpath)
           ):
-        main_thread(args, mainctrl)
+        #**** when using python-daemon, initialize logging AFTER context creation ****
+        logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s', 
+          datefmt='%Y-%m-%dT%H:%M:%S',
+          filename=logpath,
+          #filemode='w', 
+          level=logging.INFO)
+
+        log = logging.getLogger(__name__)
+        main_thread(args, mainctrl, log)
 
 def daemon_restart(args):
     print("INFO: {0} Restarting...".format(PROGNAME))
@@ -130,11 +131,20 @@ def daemon_status(args):
     else:
       print("INFO: Daemon is NOT running.")
 
+def daemon_kill(args):
+    if os.path.exists(pidpath):
+      with open(pidpath, "r") as f:
+        os.kill(int(f.readline()), signal.SIGKILL)
+        os.remove(pidpath)
+    else:
+      print("WARN: no process to kill")
+
 sp_stop.set_defaults(callback=daemon_stop)
 sp_status.set_defaults(callback=daemon_status)
 sp_start.set_defaults(callback=daemon_start)
 sp_restart.set_defaults(callback=daemon_restart)
 sp_debug.set_defaults(callback=daemon_debug)
+sp_kill.set_defaults(callback=daemon_kill)
 
 args = parser.parse_args()
 

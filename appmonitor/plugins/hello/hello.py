@@ -6,12 +6,13 @@ PLUGIN_PRIORITY = 0
 printF = print
 config = None
 
-def init(printFunc=print, conf = None):
-  printF = printFunc
+log = logging.getLogger(__name__)
+
+def init(conf = None):
   config = None
-  printF("hello plugin init with {0}".format(config))
+  log.info("hello plugin init with {0}".format(config))
   return PLUGIN_PRIORITY, "ok"
 
 def preprocess(data):
-  #printF("hello plugin preprocess")
+  #log.info("hello plugin preprocess")
   return data

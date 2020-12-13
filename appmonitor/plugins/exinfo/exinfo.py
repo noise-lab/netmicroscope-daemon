@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, logging
 from os import path
 import geoip2.webservice
 import dns.resolver, dns.reversename
@@ -17,10 +17,11 @@ from appmonitor.plugins.exinfo.exinfodb import GeoIP, Whois, Rdns, ExInfoDB, Ext
 PLUGIN_PRIORITY = 2
 
 config = None
-printF = None
 exinfopath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 extbls = os.path.join(exinfopath, "exinfo.bls")
 extwls = os.path.join(exinfopath, "exinfo.wls")
+
+log = logging.getLogger(__name__)
 
 #lift from https://gist.github.com/mnordhoff/2213179
 ipv4re = re.compile(
@@ -63,13 +64,13 @@ class ExInfo:
             if os.getenv('MMGEOIP_ID') is not None:
                 mmgeoip_id = os.getenv('MMGEOIP_ID')
             else:
-                printF("ERROR: MMGEOIP_ID not set, Exiting...")
+                log.error("ERROR: MMGEOIP_ID not set, Exiting...")
                 print("ERROR: MMGEOIP_ID not set, Exiting...")
                 sys.exit(1)
             if os.getenv('MMGEOIP_KEY') is not None:
                 mmgeoip_key = os.getenv('MMGEOIP_KEY')
             else:
-                printF("ERROR: MMGEOIP_KEY not set, Exiting...")
+                log.error("ERROR: MMGEOIP_KEY not set, Exiting...")
                 sys.exit(1)
             self.client = geoip2.webservice.Client(
                 mmgeoip_id,
@@ -148,7 +149,7 @@ class ExInfo:
                    ext1 = ext1[0]
                 else:
                    retErr = "WARNING: insertEx failed to insert {0}".format(ext1)
-                   printF(retErr)
+                   log.error(retErr)
                    return None, retErr
 
             if ext1 is not None:
@@ -178,14 +179,14 @@ class ExInfo:
                    Rdns(host=ext1.host,\
                         info="{}".format(rdns_host)))
                    if self.debug:
-                        printF("RDNS: host:{0}, device:{1}, org:{2}, query:{3} rdns:{4}"\
+                        log.info("RDNS: host:{0}, device:{1}, org:{2}, query:{3} rdns:{4}"\
                             .format(host, ext1.host, ext1.device,\
                                  ext1.query, rdns_host))
                    if err is not None:
-                     printF("WARNING: task_resolve_rdns unable to update/insert ({0})".format(err))
+                     log.warn("WARNING: task_resolve_rdns unable to update/insert ({0})".format(err))
                 except Exception as e:
                   if self.debug:
-                    printF("task_resolve_rdns {}".format(e))
+                    log.error("task_resolve_rdns {}".format(e))
 
         async def task_resolve_whois(self, ext, host, ext1, lock):
             async with lock:
@@ -198,12 +199,12 @@ class ExInfo:
                                     info="{}".format(whois['asn_description'])))
                             if err is not None:
                                 if self.debug:
-                                    printF("WARNING: task_resolve_whois unable to update/inser ({0})".format(err))
+                                    log.warn("WARNING: task_resolve_whois unable to update/inser ({0})".format(err))
                         elif self.debug:
-                            printF("WARNING: task_resolve_whois unable to resolve ({0})".format(host))
+                            log.warn("WARNING: task_resolve_whois unable to resolve ({0})".format(host))
                 except Exception as e:
                     if self.debug:
-                        printF("task_resolve_whois {}".format(e))
+                        log.info("task_resolve_whois {}".format(e))
 
         async def task_resolve_geoip(self, ext, host, ext1, lock):
             async with lock:
@@ -211,7 +212,7 @@ class ExInfo:
                     geoip, qr = mmquery(self.client, host)
                     if geoip is not None:
                         if self.debug:
-                            printF("GEOIP: host:{0}, device:{1}, org:{2}, query:{3} city:{4}"\
+                            log.info("GEOIP: host:{0}, device:{1}, org:{2}, query:{3} city:{4}"\
                                 .format(host,ext1.device,\
                                     geoip['org'], ext1.query, geoip['city']))
                         if str(geoip['lat']) == "37.751" and str(geoip['lng'])== "-97.822":
@@ -232,12 +233,12 @@ class ExInfo:
                                         asnum = geoip['ASnum'],\
                                         asorg = geoip['ASorg']), qr)
                         if err is not None:
-                            printF("WARNING: task_resolve_geoip unable to update/inser ({0})".format(err))
+                            log.warn("WARNING: task_resolve_geoip unable to update/inser ({0})".format(err))
                     else:
-                        printF("WARNING: task_resolve_geoip unable to resolve ({0})".format(host))
+                        log.warn("WARNING: task_resolve_geoip unable to resolve ({0})".format(host))
                 except Exception as e:
                     if self.debug:
-                        printF("task_resolve_geoip {}".format(e))
+                        log.warn("task_resolve_geoip {}".format(e))
 
 exinfo = None
 
@@ -254,7 +255,7 @@ def i(i):
      try:
          int(i)
      except Exception as e:
-         printF("ERROR: mmquery.i {0}".format(e))
+         log.error("ERROR: mmquery.i {0}".format(e))
          return -1
 
 def f(s):
@@ -283,17 +284,17 @@ def mmquery(client, ipaddr):
         response = client.city(ipaddr)
     except HTTPError as he:
         if he is not None:
-            printF("(HTTPSerror) Failed to query {0}: {1}".format(ipaddr, he))
+            log.warn("(HTTPSerror) Failed to query {0}: {1}".format(ipaddr, he))
             return {'err' : str(he)}, None
     except GeoIP2Error as ge:
         if ge is not None:
-            printF("(GeoIP2Error) Failed to query {0}: {1}".format(ipaddr, ge))
+            log.warn("(GeoIP2Error) Failed to query {0}: {1}".format(ipaddr, ge))
             return {'err' : str(ge)}, None
     except Exception as e:
-        printF("(Exception) Failed to query {0}: {1}".format(ipaddr, e))
+        log.warn("(Exception) Failed to query {0}: {1}".format(ipaddr, e))
         return {'err' : str(e)}, None
 
-    #printF("Queries remaining:", response.maxmind.queries_remaining)
+    #log.info("Queries remaining:", response.maxmind.queries_remaining)
     return {'ip': ipaddr, 'city': s(response.city.name),
             'state': s(response.subdivisions.most_specific.iso_code),
             'country': s(response.country.iso_code),
@@ -307,11 +308,9 @@ def mmquery(client, ipaddr):
             'ASnum': i(response.traits.autonomous_system_number),
             'ASorg': s(response.traits.autonomous_system_organization)}, response.maxmind.queries_remaining
 
-def init(printFunc=print, conf=None):
+def init(conf=None):
   global exinfo
   global config
-  global printF
-  printF = printFunc
   config = conf
   if 'deployment' not in config.keys():
       return -1, "deployment key not configured"
@@ -336,7 +335,6 @@ def preprocess(data):
             device = dev
           if 'Domain' in data['std'][dev][app].keys():
             query = data['std'][dev][app]['Domain']
-    #printF("DEVICE:{}".format(device))
           do_insert = False
           timestamp = str(data['std'][dev][app]['TsEnd'])
           if sip is not None and query is not None:
@@ -348,17 +346,12 @@ def preprocess(data):
             if do_insert:
                 e, err = exinfo.query(sip, query, device)
                 if err is not None:
-                    printF("WARNING: do_insert exinfo.query error ({0})".format(err))
+                    log.info("WARNING: do_insert exinfo.query error ({0})".format(err))
                     continue
                 if e is None:
                     continue
             
                 geoip, whois, rdns = exinfo.exinfodb.getExInfo(e.host)
-
-                #else:
-                #   printF("DEVICE BLACKLISTED:{}".format(device))
-
-                #print("{0}, geoip:{1}, whois:{2}, rdns:{3}".format(e, geoip, whois, rdns))
 
                 if not e.query: # and e.hits > 0:
                     if rdns is not None:
@@ -366,17 +359,17 @@ def preprocess(data):
                             e.query = rdns.info
                             _, err = exinfo.exinfodb.updateExQuery(e, rdns.info)
                             if err is not None:
-                                printF("WARNING: do_insert - unable to update query field (rdns)")
+                                log.warn("WARNING: do_insert - unable to update query field (rdns)")
                     if not e.query:
                         if whois is not None:
                             if not whois.info:
                                 e.query = whois.info
                                 _, err = exinfo.exinfodb.updateExQuery(e, whois.info)
                                 if err is not None:
-                                    printF("WARNING: do_insert - unable to update query field (whois)")
+                                    log.warn("WARNING: do_insert - unable to update query field (whois)")
 
                 if geoip is None:
-                    #printF("WARNING: insertQuery geoip null, query: {0}:{1}", e.host, e.query)
+                    #log.warn("WARNING: insertQuery geoip null, query: {0}:{1}", e.host, e.query)
                     continue
 
                 #TODO: consider disabling the following
@@ -390,11 +383,11 @@ def preprocess(data):
                                         device, e.query),\
                                             device, e.hits,\
                                             timestamp + '000000000'))
-                    #printF(insertQuery)
+                    #log.info(insertQuery)
                     insert.append(insertQuery)
                 except KeyError:
                     #TODO: better error handling
-                    #printF("Key Error {0} {1}".format(device, sip))
+                    #log.error("Key Error {0} {1}".format(device, sip))
                     pass
                 '''
                 data['ext'][device] = { sip : ddata }
@@ -417,7 +410,7 @@ def preprocess(data):
                         insert.append(insertQuery)
                     except KeyError:
                         #TODO: better error handling
-                        #printF("Key Error {0} {1}".format(device, sip))
+                        #log.error("Key Error {0} {1}".format(device, sip))
                         pass
                 '''
   
@@ -425,10 +418,10 @@ def preprocess(data):
   try:
       pending = exinfo.exinfodb.getExPending()
   except Exception as e:
-      printF("WARNING exinfo.exinfodb.getExPending:{0}".format(e))
+      log.warn("WARNING exinfo.exinfodb.getExPending:{0}".format(e))
   if pending is not None:
     for p in pending:
-        #printF("PENDING: {0}, {1}/{2}/{3}".format(p['ext'], p['geoip'], p['whois'], p['rdns']))
+        #log.info("PENDING: {0}, {1}/{2}/{3}".format(p['ext'], p['geoip'], p['whois'], p['rdns']))
         try:
             if p['geoip'] is None:
                 continue
@@ -444,7 +437,7 @@ def preprocess(data):
                                 e.device, e.query),\
                                     e.device, e.hits,\
                                     timestamp + '000000000'))
-            #printF(insertQuery)
+            #log.info(insertQuery)
             insert.append(insertQuery)
         except KeyError:
             #TODO: better error handling

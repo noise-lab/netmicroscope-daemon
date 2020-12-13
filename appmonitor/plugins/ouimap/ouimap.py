@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, logging
 from os import path
 import logging
 import pickle
@@ -8,7 +8,6 @@ import re
 """OUI mac address to manufacturer mapping"""
 PLUGIN_PRIORITY = 1
 
-printF = print
 ouidatpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 ouitxt = os.path.join(ouidatpath, "oui.txt")
 ouipkl = os.path.join(ouidatpath, "oui.pkl")
@@ -21,9 +20,10 @@ ouiurl=[
   "http://standards-oui.ieee.org/oui/oui.txt"
 ]
 
-def init(printFunc=print, conf=None):
+log = logging.getLogger(__name__)
+
+def init(conf=None):
   global oui
-  printF = printFunc
   config = conf
   if not path.exists(ouidatpath):
     os.mkdir(ouidatpath)
@@ -45,18 +45,17 @@ def init(printFunc=print, conf=None):
           f.close()
           break
         except Exception as e:
-          printF("ouimap: WARNING Failed to retrive {0}".format(url))
-          printF("ouimap: ERROR {0}".format(e))
+          log.error("ouimap: WARNING Failed to retrive {0}".format(url))
+          log.error("ouimap: ERROR {0}".format(e))
           pass
       oui = generate_oui_dict()
-  printF("Module OUI mapping initialized (ouimap) with {0}".format(config))
+  log.info("Module OUI mapping initialized (ouimap) with {0}".format(config))
   return PLUGIN_PRIORITY, "ok"
 
 def preprocess(data):
-  #printF("ouimap: preprocessing")
   ddata = {}
   if oui is None:
-    printF("ouimap: ERROR oui dict not initialized")
+    log.error("ouimap: ERROR oui dict not initialized")
     return data
   if data is None:
     return data
@@ -94,6 +93,7 @@ def generate_oui_dict():
                     r1=r.group(1).replace("-",":").lower()
                     r2=r.group(2)
                 except IndexError as ie:
+                    log.warn("WARN: generate_oui_dict regex - " + str(ie))
                     print("WARN: generate_oui_dict regex - " + str(ie))
                     continue
                 oui[r1] = r2

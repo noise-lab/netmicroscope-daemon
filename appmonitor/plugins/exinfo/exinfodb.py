@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os
+import os, logging
 from datetime import datetime
 from sqlalchemy import bindparam
 from sqlalchemy import Column
@@ -13,6 +13,8 @@ import threading
 Base = declarative_base()
 DATA_EXINFODB = "data/exinfodb.sqlite"
 MAX_VALUES_PER_TAG = 100000 
+
+log = logging.getLogger(__name__)
 
 class Connection(Base):
     __tablename__ = "connection"

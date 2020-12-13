@@ -12,9 +12,11 @@ import urllib
 import urllib.parse
 import urllib.request
 import imp
-import os
+import logging
 
 from dotenv import load_dotenv
+
+log = logging.getLogger(__name__)
 
 def f(s):
   if s is None:
@@ -29,62 +31,61 @@ class AppMonitor:
   thread_ctrl = None
   filestatus = {}
   influxdb = None 
-  logger = None
   listener = None
   pluginfolder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugins")
   mainmodule = "module"
   plugins = []
-
+  '''
   def printF (self, m):
     if self.logger:
       self.logger.info(m)
     else:
       print(m)
+  '''
 
-  def __init__(self, thread_ctrl, logger = None):
+  def __init__(self, thread_ctrl):
     load_dotenv(verbose=True)
     self.thread_ctrl = thread_ctrl
-    self.influxdb = self.InfluxDB(self.printF, self.thread_ctrl)
-    self.logger = logger
+    self.influxdb = self.InfluxDB(self.thread_ctrl)
     if os.getenv('INFLUXDB_ENABLE') == 'true':
-      self.printF("INFO: influxdb enabled, checking environment variables...")
+      log.info("INFO: influxdb enabled, checking environment variables...")
       if os.getenv('INFLUXDB_HOST') is not None:
         self.influxdb.host = os.getenv('INFLUXDB_HOST')
       else:
-        self.printF("ERROR: INFLUXDB_HOST not set, Exiting...")
+        log.error("ERROR: INFLUXDB_HOST not set, Exiting...")
         sys.exit(1)
       if os.getenv('INFLUXDB_PORT') != 0:
         self.influxdb.port = os.getenv('INFLUXDB_PORT')
       else:
-        self.printF("ERROR: INFLUXDB_PORT not set, Exiting...")
+        log.error("ERROR: INFLUXDB_PORT not set, Exiting...")
         sys.exit(1)
       if os.getenv('INFLUXDB_WRITE_USER') is not None:
         self.influxdb.userw = os.getenv('INFLUXDB_WRITE_USER')
       else:
-        self.printF("ERROR: INFLUXDB_WRITE_USER not set, Exiting...")
+        log.error("ERROR: INFLUXDB_WRITE_USER not set, Exiting...")
         sys.exit(1)
       if os.getenv('INFLUXDB_WRITE_USER_PASSWORD') is not None:
         self.influxdb.passw = os.getenv('INFLUXDB_WRITE_USER_PASSWORD')
       else:
-        self.printF("ERROR: INFLUXDB_WRITE_USER_PASSWORD not set, Exiting...")
+        log.error("ERROR: INFLUXDB_WRITE_USER_PASSWORD not set, Exiting...")
         sys.exit(1)
       if os.getenv('INFLUXDB_DEPLOYMENT') is not None:
         self.influxdb.deployment = os.getenv('INFLUXDB_DEPLOYMENT')
       else:
-        self.printF("ERROR: INFLUXDB_DEPLOYMENT not set, Exiting...")
+        log.error("ERROR: INFLUXDB_DEPLOYMENT not set, Exiting...")
         sys.exit(1)
       if os.getenv('INFLUXDB_DB') is not None:
         self.influxdb.database = os.getenv('INFLUXDB_DB')
       else:
-        self.printF("ERROR: INFLUXDB_DB not set, Exiting...")
+        log.error("ERROR: INFLUXDB_DB not set, Exiting...")
         sys.exit(1)
   
     for p in self.getPlugins():
-       self.printF("Loading plugin " + p["name"])
+       log.info("Loading plugin " + p["name"])
        plugin = self.loadPlugin(p)
-       priority, errmsg = plugin.init(self.printF, {'deployment': self.influxdb.deployment})
+       priority, errmsg = plugin.init({'deployment': self.influxdb.deployment})
        if priority < 0:
-         self.printF(errmsg)
+         log.info(errmsg)
          sys.exit(1)
        self.plugins.append({'plugin':plugin, 'priority':priority})
     self.plugins = sorted(self.plugins, key = lambda i: i['priority']) #,reverse=True
@@ -128,13 +129,12 @@ class AppMonitor:
     #insert = None #inser queue
     influxdb_queue = None
 
-    def __init__(self, printF, thread_ctrl):
+    def __init__(self,thread_ctrl):
       self.influxdb_queue = queue.Queue()
-      self.printFunc = printF
       self.thread_ctrl = thread_ctrl
 
-    def printF(self, m):
-      self.printFunc(m)
+    #def printF(self, m):
+    #  self.printFunc(m)
 
     def influxdb_updater_thread(self, pluginPreProcess):
       while self.thread_ctrl['continue']:
@@ -147,7 +147,7 @@ class AppMonitor:
           if summary is None:
             continue
           if 'std' not in summary.keys():
-            self.printF("WARNING: malformed summary/insert data {0}".format(summary))
+            log.warn("WARNING: malformed summary/insert data {0}".format(summary))
             continue
           else:
             insert = summary['std']
@@ -159,7 +159,7 @@ class AppMonitor:
           for dev in insert.keys():
             if insert[dev] is not None:
               for app in insert[dev]:
-                 self.printF(app + "-" + dev + " " + str(insert[dev][app]))
+                 log.info(app + "-" + dev + " " + str(insert[dev][app]))
           try:
             data = ''
             TsEnd = None
@@ -239,11 +239,11 @@ class AppMonitor:
             data = data.encode()
             req = urllib.request.Request(self.url, data, self.header)
             with urllib.request.urlopen(req) as response:
-               self.printF('OK' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
+               log.info('OK' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
           except Exception as e:
               exc_type, _, exc_tb = sys.exc_info()
               fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-              self.printF("EXCEPTION: influxdb_updater_thread: {0} {1} {2} (dev:{3}) {4} {5}"\
+              log.error("EXCEPTION: influxdb_updater_thread: {0} {1} {2} (dev:{3}) {4} {5}"\
                       .format(exc_type, fname, exc_tb.tb_lineno, dev, e, e.read().decode("utf8", 'ignore')))
 
 
@@ -258,41 +258,40 @@ class AppMonitor:
       printFunc = None
       running = True
       filename = None
-      def __init__(self, process_tmp_ta, printF, filestatus, thread_ctrl):
+      def __init__(self, process_tmp_ta, filestatus, thread_ctrl):
         self.process_tmp_ta = process_tmp_ta
         self.filestatus = filestatus
-        self.printFunc = printF
         self.thread_ctrl = thread_ctrl
 
-      def printF(self, m):
-        self.printFunc(m)
+      #def printF(self, m):
+      #  self.printFunc(m)
       
       def fsreader(self):
         while self.thread_ctrl['continue'] and self.running:
           files=glob.glob("/tmp/tmp.ta.*")
           if len(files) > 1:
-            self.printF("WARNING: multiple tmp.ta.* files found.")
+            log.warn("WARNING: multiple tmp.ta.* files found.")
           for f in files:
             try:
               if self.filestatus[f]['running']:
-                self.printF("TAHandler {0} is running.".format(f))
+                log.info("TAHandler {0} is running.".format(f))
                 continue
-              self.printF("TAHandler ignoring {0}.".format(f))
+              log.info("TAHandler ignoring {0}.".format(f))
             except KeyError as ke:
               if self.worker is not None:
                 self.filestatus[self.filename]['running'] = False
                 self.filestatus[self.filename]['tail'].kill()
                 self.worker.join()
-                self.printF("TAHandler terminating {0}:{1}.".format(f, ke))
+                log.info("TAHandler terminating {0}:{1}.".format(f, ke))
               else:
-                self.printF("TAHandler initializing {0}:{1}.".format(f, ke))
+                log.info("TAHandler initializing {0}:{1}.".format(f, ke))
               self.worker = threading.Thread(target=self.process_tmp_ta, args=(f,))
               self.filestatus[f] = {}
               self.filestatus[f]['thread'] = self.worker
               self.filename = f
               self.worker.start()
             except Exception as e:
-              self.printF("ERROR: {0}".format(e))
+              log.error("ERROR: {0}".format(e))
           time.sleep(10)
   
       def start(self):
@@ -308,14 +307,14 @@ class AppMonitor:
 
   def process_tmp_ta(self, filename=""):
       if filename == "":
-        self.printF("INFO: No files to process now.")  
+        log.info("INFO: No files to process now.")  
       else:
       
         if not os.path.isfile(filename):
-          self.printF("ERROR: filename "+filename+" is not a file.")
+          log.error("ERROR: filename "+filename+" is not a file.")
           return False
         else:
-          self.printF("Processing: " + filename)
+          log.info("Processing: " + filename)
           self.filestatus[filename]['running'] = True
           self.filestatus[filename]['tail'] = sh.tail("-F", filename, _iter=True, _bg_exc=False)
   
@@ -355,30 +354,30 @@ class AppMonitor:
               #  for app in summary[dev]:
               #    self.printF(app + "-" + dev + " " + str(summary[dev][app]))
           except sh.ErrorReturnCode_1: # as e:
-              self.printF("process_tmp_ta: tail terminated {0}, (permission denied ?) ".format(filename))
+              log.info("process_tmp_ta: tail terminated {0}, (permission denied ?) ".format(filename))
               break
           except sh.SignalException_SIGKILL as e:
-              self.printF("process_tmp_ta: tail terminated {0}".format(filename))
+              log.info("process_tmp_ta: tail terminated {0}".format(filename))
               break
           except Exception as e:
               exc_type, _, exc_tb = sys.exc_info()
               fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-              self.printF("process_tmp_ta: {0} {1} {2}".format(exc_type, fname, exc_tb.tb_lineno))
+              log.error("process_tmp_ta: {0} {1} {2}".format(exc_type, fname, exc_tb.tb_lineno))
 
-        self.printF('process_tmp_ta: exiting ' + filename)
+        log.info('process_tmp_ta: exiting ' + filename)
         #with open(FILESTATUS, 'wb') as handle:
         #  pickle.dump(filestatus, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return True
 
   def run(self):
-    self.listener = self.TAHandler(self.process_tmp_ta, self.printF, self.filestatus, self.thread_ctrl)
+    self.listener = self.TAHandler(self.process_tmp_ta, self.filestatus, self.thread_ctrl)
     self.listener.start()
     if os.getenv('INFLUXDB_ENABLE') == 'true':
-       self.printF("INFO: running thread.")
+       log.info("INFO: running thread.")
        threading.Thread(target=self.influxdb.influxdb_updater_thread, 
           args=(self.pluginPreProcess,),
           daemon=True).start()
-       self.printF("INFO: Done")
+       log.info("INFO: Done")
     #try:
     #  with open(self.FILESTATUS, 'rb') as handle:
     #     filestatus = pickle.load(handle)
@@ -386,7 +385,7 @@ class AppMonitor:
     #  pass 
 
     #self.process_tmp_ta()
-    self.printF("MAIN: joining threads")
+    log.info("MAIN: joining threads")
 
     try:
         while self.thread_ctrl['continue']:
@@ -396,16 +395,16 @@ class AppMonitor:
               if 'running' in self.filestatus[k].keys():
                 if self.filestatus[k]['running']:
                   if 'thread' in self.filestatus[k].keys():
-                    self.printF("MAIN: waiting for " + k)
+                    log.info("MAIN: waiting for " + k)
                     self.filestatus[k]['thread'].join()
                     self.filestatus[k]['running'] = False
-                    self.printF("MAIN: " +k + " joined")
+                    log.info("MAIN: " +k + " joined")
           except RuntimeError as re:
-            self.printF("WARNING: " + str(re))
+            log.warn("WARNING: " + str(re))
             pass 
     except KeyboardInterrupt:
       self.stop()
-    self.printF("MAIN: listener join")
+    log.info("MAIN: listener join")
     self.listener.join()
     self.influxdb.influxdb_queue.join()
 
