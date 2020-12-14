@@ -17,6 +17,7 @@ maxminddb==2.0.2
 mccabe==0.6.1
 multidict==4.7.6
 pathtools==0.1.2
+pika==1.1.0
 pylint==2.5.3
 python-daemon==2.2.4
 python-dotenv==0.14.0
