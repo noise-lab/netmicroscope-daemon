@@ -1,6 +1,9 @@
 #!/usr/bin/python
 import os, sys
 import sh
+import pika #aiopika
+import ssl
+import certifi
 import time
 import glob
 import json
@@ -29,24 +32,16 @@ class AppMonitor:
 
   FILESTATUS = "processedfiles.pickle" #TODO: TBD
   thread_ctrl = None
-  filestatus = {}
-  influxdb = None 
+  iostatus = {}
+  influxdb = None
+  rabbitmq = None
   listener = None
   pluginfolder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugins")
   mainmodule = "module"
   plugins = []
-  '''
-  def printF (self, m):
-    if self.logger:
-      self.logger.info(m)
-    else:
-      print(m)
-  '''
+  mode = None
 
-  def __init__(self, thread_ctrl):
-    load_dotenv(verbose=True)
-    self.thread_ctrl = thread_ctrl
-    self.influxdb = self.InfluxDB(self.thread_ctrl)
+  def initInfluxdb(self):
     if os.getenv('INFLUXDB_ENABLE') == 'true':
       log.info("INFO: influxdb enabled, checking environment variables...")
       if os.getenv('INFLUXDB_HOST') is not None:
@@ -79,15 +74,75 @@ class AppMonitor:
       else:
         log.error("ERROR: INFLUXDB_DB not set, Exiting...")
         sys.exit(1)
-  
+
+  def initRabbitMQ(self):
+      if os.getenv('RABBITMQ_SSL_USER') is not None:
+        self.rabbitmq.user = os.getenv('RABBITMQ_SSL_USER')
+      else:
+        log.error("ERROR: RABBITMQ_SSL_USER not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('RABBITMQ_SSL_PASS') is not None:
+        self.rabbitmq.password = os.getenv('RABBITMQ_SSL_PASS')
+      else:
+        log.error("ERROR: RABBITMQ_SSL_PASS not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('RABBITMQ_SSL_HOST') is not None:
+        self.rabbitmq.host = os.getenv('RABBITMQ_SSL_HOST')
+      else:
+        log.error("ERROR: RABBITMQ_SSL_HOST not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('RABBITMQ_SSL_PORT') is not None:
+        self.rabbitmq.port = os.getenv('RABBITMQ_SSL_PORT')
+      else:
+        log.error("ERROR: RABBITMQ_SSL_PORT not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('RABBITMQ_SSL_CERTFILE') is not None:
+        self.rabbitmq.cert = os.getenv('RABBITMQ_SSL_CERTFILE')
+      else:
+        log.error("ERROR: RABBITMQ_SSL_CERTFILE not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('RABBITMQ_SSL_PKEYFILE') is not None:
+        self.rabbitmq.keyf = os.getenv('RABBITMQ_SSL_PKEYFILE')
+      else:
+        log.error("ERROR: RABBITMQ_SSL_PKEYFILE not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('RABBITMQ_SSL_CERTPASS') is not None:
+        self.rabbitmq.certpass = os.getenv('RABBITMQ_SSL_CERTPASS')
+      else:
+        log.error("ERROR: RABBITMQ_SSL_CERTPASS not set, Exiting...")
+        sys.exit(1)
+      if os.getenv('RABBITMQ_SSL_TOPIC') is not None:
+        self.rabbitmq.topic = os.getenv('RABBITMQ_SSL_TOPIC')
+      else:
+        log.error("ERROR: RABBITMQ_SSL_TOPIC not set, Exiting...")
+        sys.exit(1)
+
+  def __init__(self, thread_ctrl):
+    load_dotenv(verbose=True)
+    self.thread_ctrl = thread_ctrl
+    log.info("reading MODE: [{0}]".format(os.getenv('NMD_MODE')))
+    if os.getenv('NMD_MODE') == 'consumer' or os.getenv('NMD_MODE') == 'standalone':
+      self.influxdb = self.InfluxDB(self.thread_ctrl)
+      self.initInfluxdb()
+      if os.getenv('NMD_MODE') == 'consumer':
+        self.rabbitmq = self.RabbitMQ(self.thread_ctrl)
+        self.initRabbitMQ()
+        self.mode = 'c' # consumer
+      else:
+        self.mode = 's' # standalone
+    else: 
+      self.mode = 'p' # producer
+      self.rabbitmq = self.RabbitMQ(self.thread_ctrl)
+      self.initRabbitMQ()
+
     for p in self.getPlugins():
-       log.info("Loading plugin " + p["name"])
-       plugin = self.loadPlugin(p)
-       priority, errmsg = plugin.init({'deployment': self.influxdb.deployment})
-       if priority < 0:
-         log.info(errmsg)
-         sys.exit(1)
-       self.plugins.append({'plugin':plugin, 'priority':priority})
+      log.info("Loading plugin " + p["name"])
+      plugin = self.loadPlugin(p)
+      priority, errmsg = plugin.init({'deployment': self.influxdb.deployment})
+      if priority < 0:
+        log.info(errmsg)
+        sys.exit(1)
+      self.plugins.append({'plugin':plugin, 'priority':priority})
     self.plugins = sorted(self.plugins, key = lambda i: i['priority']) #,reverse=True
 
   def getPlugins(self):
@@ -109,6 +164,18 @@ class AppMonitor:
       insertData = p['plugin'].preprocess(insertData)
     return insertData
 
+  class RabbitMQ(object):
+    host = None
+    port = 0
+    user = None
+    password = None
+    cert = None
+    keyf = None
+    certpass = None
+    topic = None
+    def __init__(self,thread_ctrl):
+      self.thread_ctrl = thread_ctrl
+
   class InfluxDB(object):
     host = None
     port = 0
@@ -124,17 +191,12 @@ class AppMonitor:
     url = None
     header = None
 
-    printFunc = None
-
     #insert = None #inser queue
     influxdb_queue = None
 
     def __init__(self,thread_ctrl):
       self.influxdb_queue = queue.Queue()
       self.thread_ctrl = thread_ctrl
-
-    #def printF(self, m):
-    #  self.printFunc(m)
 
     def influxdb_updater_thread(self, pluginPreProcess):
       while self.thread_ctrl['continue']:
@@ -147,7 +209,7 @@ class AppMonitor:
           if summary is None:
             continue
           if 'std' not in summary.keys():
-            log.warn("WARNING: malformed summary/insert data {0}".format(summary))
+            log.warning("WARNING: malformed summary/insert data {0}".format(summary))
             continue
           else:
             insert = summary['std']
@@ -155,7 +217,7 @@ class AppMonitor:
             if 'ext' in summary.keys():
               if 'insert' in summary['ext'].keys():
                 extend = summary['ext']['insert']
-            #self.printF("EXTINFO: {}".format(summary['ext']))
+            #log.info("EXTINFO: {}".format(summary['ext']))
           for dev in insert.keys():
             if insert[dev] is not None:
               for app in insert[dev]:
@@ -246,48 +308,93 @@ class AppMonitor:
               log.error("EXCEPTION: influxdb_updater_thread: {0} {1} {2} (dev:{3}) {4} {5}"\
                       .format(exc_type, fname, exc_tb.tb_lineno, dev, e, e.read().decode("utf8", 'ignore')))
 
-
-
           self.influxdb_queue.task_done()
-
-  class TAHandler():
-      process_tmp_ta = None
-      filestatus = None
+  
+  ##
+  # "fs" mode, handles of /tmp/tmp.ta.* file changes via tail
+  # "mq" mode, handles consumer message receive events
+  class TAHandler(): 
+      process_data_from_source = None
+      iostatus = None
       thread_ctrl = None
       worker = None
       printFunc = None
       running = True
       filename = None
-      def __init__(self, process_tmp_ta, filestatus, thread_ctrl):
-        self.process_tmp_ta = process_tmp_ta
-        self.filestatus = filestatus
+      rabbitmq = None
+      mode = None
+      def __init__(self, process_data_from_source, iostatus, mode, thread_ctrl, rabbitmq=None):
+        self.process_data_from_source = process_data_from_source
+        self.iostatus = iostatus
         self.thread_ctrl = thread_ctrl
+        self.mode = mode
+        self.rabbitmq=rabbitmq
 
-      #def printF(self, m):
-      #  self.printFunc(m)
-      
+      def mqreader(self):
+        while self.thread_ctrl['continue'] and self.running:
+          if self.worker is None:
+            connection = None
+            credentials = pika.PlainCredentials(self.rabbitmq.user, self.rabbitmq.password)
+
+            context = ssl.create_default_context(cafile=certifi.where());
+            basepath = os.path.join(os.path.dirname(__file__), "../")
+            certfile = os.path.join(basepath, self.rabbitmq.cert)
+            keyfile = os.path.join(basepath, self.rabbitmq.keyf)
+            log.info("RabbitMQ SSL using {0} {1} from {2} to {3}:{4}".format(self.rabbitmq.cert, self.rabbitmq.keyf,\
+              basepath, self.rabbitmq.host, self.rabbitmq.port))
+            context.load_cert_chain(certfile, keyfile, self.rabbitmq.certpass)
+
+            ssl_options = pika.SSLOptions(context, self.rabbitmq.host)
+            try:
+              connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.rabbitmq.host,
+                port=int(self.rabbitmq.port),
+                ssl_options = ssl_options,
+                virtual_host='/',
+                credentials=credentials))
+            except Exception as e:
+              exc_type, _, exc_tb = sys.exc_info()
+              fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+              log.error("rabbitmq error: ({0}) {1} {2} {3}".format(str(e), exc_type, fname, exc_tb.tb_lineno))
+              traceback.print_exc()
+              sys.exit(1)
+            channel = connection.channel()
+            channel.queue_declare(queue='hello')
+            def callback(ch, method, properties, body):
+                print(" [x] Received %r" % body)
+            channel.basic_consume(queue=self.rabbitmq.topic, on_message_callback=callback, auto_ack=True)
+
+            self.worker = threading.Thread(target=self.process_data_from_source, args=(self.rabbitmq.topic, channel,))
+            self.iostatus[self.rabbitmq.topic] = {}
+            self.iostatus[self.rabbitmq.topic]['thread'] = self.worker
+            self.iostatus[self.rabbitmq.topic]['channel'] = channel
+            self.worker.start()
+          time.sleep(1)
+
+        channel.cancel()
+        #channel.close()
+
       def fsreader(self):
         while self.thread_ctrl['continue'] and self.running:
           files=glob.glob("/tmp/tmp.ta.*")
           if len(files) > 1:
-            log.warn("WARNING: multiple tmp.ta.* files found.")
+            log.warning("WARNING: multiple tmp.ta.* files found.")
           for f in files:
             try:
-              if self.filestatus[f]['running']:
+              if self.iostatus[f]['running']:
                 log.info("TAHandler {0} is running.".format(f))
                 continue
               log.info("TAHandler ignoring {0}.".format(f))
             except KeyError as ke:
               if self.worker is not None:
-                self.filestatus[self.filename]['running'] = False
-                self.filestatus[self.filename]['tail'].kill()
+                self.iostatus[self.filename]['running'] = False
+                self.iostatus[self.filename]['tail'].kill()
                 self.worker.join()
                 log.info("TAHandler terminating {0}:{1}.".format(f, ke))
               else:
                 log.info("TAHandler initializing {0}:{1}.".format(f, ke))
-              self.worker = threading.Thread(target=self.process_tmp_ta, args=(f,))
-              self.filestatus[f] = {}
-              self.filestatus[f]['thread'] = self.worker
+              self.worker = threading.Thread(target=self.process_data_from_source, args=(f,))
+              self.iostatus[f] = {}
+              self.iostatus[f]['thread'] = self.worker
               self.filename = f
               self.worker.start()
             except Exception as e:
@@ -295,7 +402,15 @@ class AppMonitor:
           time.sleep(10)
   
       def start(self):
-        self.thread = threading.Thread(target=self.fsreader)
+        if self.mode == 's': # standalone
+          self.thread = threading.Thread(target=self.fsreader) # file system (/tmp/tmp.ta.*)
+        elif self.mode == 'c': # consumer
+          self.thread = threading.Thread(target=self.mqreader) # rabbitmq receive
+        else:
+          log.error("INVALID MODE: {0}".format(self.mode))
+          print("INVALID MODE: {0}".format(self.mode))
+          sys.exit(1)
+          
         self.thread.start()
       
       def stop(self):
@@ -304,6 +419,20 @@ class AppMonitor:
       def join(self):
         self.thread.join()
 
+
+  #def process_mq_ta(self, channel):
+  #def process_mq_ta(self, channel, method, properties, body):
+  def process_mq_ta(self, topic, channel):
+      log.info("Processing: " + topic)
+      print(' [*] Waiting for messages. To exit press CTRL+C')
+      try:
+        channel.start_consuming()
+      except pika.exceptions.StreamLostError:
+        log.warning("rabbimq SSL channel terminated")
+      except Exception as e:
+        exc_type, _, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        log.error("process_mq_ta: {0} {1} {2}".format(exc_type, fname, exc_tb.tb_lineno))
 
   def process_tmp_ta(self, filename=""):
       if filename == "":
@@ -315,12 +444,12 @@ class AppMonitor:
           return False
         else:
           log.info("Processing: " + filename)
-          self.filestatus[filename]['running'] = True
-          self.filestatus[filename]['tail'] = sh.tail("-F", filename, _iter=True, _bg_exc=False)
+          self.iostatus[filename]['running'] = True
+          self.iostatus[filename]['tail'] = sh.tail("-F", filename, _iter=True, _bg_exc=False)
   
-        while self.filestatus[filename]['running'] and self.thread_ctrl['continue']:
+        while self.iostatus[filename]['running'] and self.thread_ctrl['continue']:
           try:
-              line = self.filestatus[filename]['tail'].next()
+              line = self.iostatus[filename]['tail'].next()
               j=json.loads(line)
               summary = {'std' : {}, 'ext': {}} #std == standard, ext == extended (rDNS. GeoIP, etc)
               if 'TrafficData' not in j.keys():
@@ -347,12 +476,12 @@ class AppMonitor:
                     summary['std'][d[device]][d['Meta']]['KbpsUp'] + d['KbpsUp']
                 summary['std'][d[device]][d['Meta']]['Domain'] = d['Domain']
                 summary['std'][d[device]][d['Meta']]['SIP'] = d['SIP']
-                #self.printF("DOMAIN:" + d['Domain'] + "," + d['SIP'])
+                #log.debug("DOMAIN:" + d['Domain'] + "," + d['SIP'])
               self.influxdb.influxdb_queue.put(summary)
 
               #for dev in summary.keys():
               #  for app in summary[dev]:
-              #    self.printF(app + "-" + dev + " " + str(summary[dev][app]))
+              #    log.debug(app + "-" + dev + " " + str(summary[dev][app]))
           except sh.ErrorReturnCode_1: # as e:
               log.info("process_tmp_ta: tail terminated {0}, (permission denied ?) ".format(filename))
               break
@@ -365,42 +494,58 @@ class AppMonitor:
               log.error("process_tmp_ta: {0} {1} {2}".format(exc_type, fname, exc_tb.tb_lineno))
 
         log.info('process_tmp_ta: exiting ' + filename)
-        #with open(FILESTATUS, 'wb') as handle:
-        #  pickle.dump(filestatus, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        #with open(iostatus, 'wb') as handle:
+        #  pickle.dump(iostatus, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return True
 
   def run(self):
-    self.listener = self.TAHandler(self.process_tmp_ta, self.filestatus, self.thread_ctrl)
-    self.listener.start()
-    if os.getenv('INFLUXDB_ENABLE') == 'true':
-       log.info("INFO: running thread.")
-       threading.Thread(target=self.influxdb.influxdb_updater_thread, 
-          args=(self.pluginPreProcess,),
-          daemon=True).start()
-       log.info("INFO: Done")
-    #try:
-    #  with open(self.FILESTATUS, 'rb') as handle:
-    #     filestatus = pickle.load(handle)
-    #except FileNotFoundError as e:
-    #  pass 
+    if self.mode == 'p': # producer
+      print("PRODUCER NOT YET IMPLEMENTED")
+      log.info("Running #### CLIENT/PRODUCER ####")
+      sys.exit(0)
 
-    #self.process_tmp_ta()
+    elif self.mode == 'c': #consumer
+      log.info("Running #### SERVER/CONSUMER ####")
+      self.listener = self.TAHandler(self.process_mq_ta, self.iostatus, self.mode, self.thread_ctrl, self.rabbitmq)
+      self.listener.start()
+      if os.getenv('INFLUXDB_ENABLE') == 'true':
+        log.info("CONSUMER: running thread.")
+        threading.Thread(target=self.influxdb.influxdb_updater_thread, 
+            args=(self.pluginPreProcess,),
+            daemon=True).start()
+        log.info("CONSUMER: Done")
+
+    else: #standalone
+      log.info("Running #### STANDALONE ####")
+      self.listener = self.TAHandler(self.process_tmp_ta, self.iostatus, self.mode, self.thread_ctrl)
+      self.listener.start()
+      if os.getenv('INFLUXDB_ENABLE') == 'true':
+        log.info("STANDALONE: running thread.")
+        threading.Thread(target=self.influxdb.influxdb_updater_thread, 
+            args=(self.pluginPreProcess,),
+            daemon=True).start()
+        log.info("STANDALONE: Done")
     log.info("MAIN: joining threads")
 
     try:
         while self.thread_ctrl['continue']:
           time.sleep(1)
           try:
-            for k in self.filestatus.keys():
-              if 'running' in self.filestatus[k].keys():
-                if self.filestatus[k]['running']:
-                  if 'thread' in self.filestatus[k].keys():
-                    log.info("MAIN: waiting for " + k)
-                    self.filestatus[k]['thread'].join()
-                    self.filestatus[k]['running'] = False
-                    log.info("MAIN: " +k + " joined")
+            if self.mode == 'p': # producer
+              print("PRODUCER NOT YET IMPLEMENTED")
+            #elif self.mode == 'c': # consumer
+            #  TBD
+            else: # standalone
+              for k in self.iostatus.keys():
+                if 'running' in self.iostatus[k].keys():
+                  if self.iostatus[k]['running']:
+                    if 'thread' in self.iostatus[k].keys():
+                      log.info("MAIN: waiting for " + k)
+                      self.iostatus[k]['thread'].join()
+                      self.iostatus[k]['running'] = False
+                      log.info("MAIN: " +k + " joined")
           except RuntimeError as re:
-            log.warn("WARNING: " + str(re))
+            log.warning("WARNING: " + str(re))
             pass 
     except KeyboardInterrupt:
       self.stop()
@@ -409,11 +554,18 @@ class AppMonitor:
     self.influxdb.influxdb_queue.join()
 
   def stop(self):
-    for k in self.filestatus.keys():
-      try: 
-          self.filestatus[k]['tail'].kill()
-      except ProcessLookupError: # as ple:
-          pass
+    if self.mode == 's':
+      for k in self.iostatus.keys():
+        try: 
+            self.iostatus[k]['tail'].kill()
+        except ProcessLookupError: # as ple: :TODO: improve this
+            pass
+    elif self.mode == 'c':
+      for k in self.iostatus.keys():
+        try: 
+            self.iostatus[k]['channel'].close()
+        except Exception: #TODO: improve this
+            pass
     self.listener.stop()
 
 #if __name__ == "__main__":

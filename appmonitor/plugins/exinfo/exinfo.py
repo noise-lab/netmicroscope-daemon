@@ -183,7 +183,7 @@ class ExInfo:
                             .format(host, ext1.host, ext1.device,\
                                  ext1.query, rdns_host))
                    if err is not None:
-                     log.warn("WARNING: task_resolve_rdns unable to update/insert ({0})".format(err))
+                     log.warning("WARNING: task_resolve_rdns unable to update/insert ({0})".format(err))
                 except Exception as e:
                   if self.debug:
                     log.error("task_resolve_rdns {}".format(e))
@@ -199,9 +199,9 @@ class ExInfo:
                                     info="{}".format(whois['asn_description'])))
                             if err is not None:
                                 if self.debug:
-                                    log.warn("WARNING: task_resolve_whois unable to update/inser ({0})".format(err))
+                                    log.warning("WARNING: task_resolve_whois unable to update/inser ({0})".format(err))
                         elif self.debug:
-                            log.warn("WARNING: task_resolve_whois unable to resolve ({0})".format(host))
+                            log.warning("WARNING: task_resolve_whois unable to resolve ({0})".format(host))
                 except Exception as e:
                     if self.debug:
                         log.info("task_resolve_whois {}".format(e))
@@ -233,12 +233,12 @@ class ExInfo:
                                         asnum = geoip['ASnum'],\
                                         asorg = geoip['ASorg']), qr)
                         if err is not None:
-                            log.warn("WARNING: task_resolve_geoip unable to update/inser ({0})".format(err))
+                            log.warning("WARNING: task_resolve_geoip unable to update/inser ({0})".format(err))
                     else:
-                        log.warn("WARNING: task_resolve_geoip unable to resolve ({0})".format(host))
+                        log.warning("WARNING: task_resolve_geoip unable to resolve ({0})".format(host))
                 except Exception as e:
                     if self.debug:
-                        log.warn("task_resolve_geoip {}".format(e))
+                        log.warning("task_resolve_geoip {}".format(e))
 
 exinfo = None
 
@@ -284,14 +284,14 @@ def mmquery(client, ipaddr):
         response = client.city(ipaddr)
     except HTTPError as he:
         if he is not None:
-            log.warn("(HTTPSerror) Failed to query {0}: {1}".format(ipaddr, he))
+            log.warning("(HTTPSerror) Failed to query {0}: {1}".format(ipaddr, he))
             return {'err' : str(he)}, None
     except GeoIP2Error as ge:
         if ge is not None:
-            log.warn("(GeoIP2Error) Failed to query {0}: {1}".format(ipaddr, ge))
+            log.warning("(GeoIP2Error) Failed to query {0}: {1}".format(ipaddr, ge))
             return {'err' : str(ge)}, None
     except Exception as e:
-        log.warn("(Exception) Failed to query {0}: {1}".format(ipaddr, e))
+        log.warning("(Exception) Failed to query {0}: {1}".format(ipaddr, e))
         return {'err' : str(e)}, None
 
     #log.info("Queries remaining:", response.maxmind.queries_remaining)
@@ -359,17 +359,17 @@ def preprocess(data):
                             e.query = rdns.info
                             _, err = exinfo.exinfodb.updateExQuery(e, rdns.info)
                             if err is not None:
-                                log.warn("WARNING: do_insert - unable to update query field (rdns)")
+                                log.warning("WARNING: do_insert - unable to update query field (rdns)")
                     if not e.query:
                         if whois is not None:
                             if not whois.info:
                                 e.query = whois.info
                                 _, err = exinfo.exinfodb.updateExQuery(e, whois.info)
                                 if err is not None:
-                                    log.warn("WARNING: do_insert - unable to update query field (whois)")
+                                    log.warning("WARNING: do_insert - unable to update query field (whois)")
 
                 if geoip is None:
-                    #log.warn("WARNING: insertQuery geoip null, query: {0}:{1}", e.host, e.query)
+                    #log.warning("WARNING: insertQuery geoip null, query: {0}:{1}", e.host, e.query)
                     continue
 
                 #TODO: consider disabling the following
@@ -418,7 +418,7 @@ def preprocess(data):
   try:
       pending = exinfo.exinfodb.getExPending()
   except Exception as e:
-      log.warn("WARNING exinfo.exinfodb.getExPending:{0}".format(e))
+      log.warning("WARNING exinfo.exinfodb.getExPending:{0}".format(e))
   if pending is not None:
     for p in pending:
         #log.info("PENDING: {0}, {1}/{2}/{3}".format(p['ext'], p['geoip'], p['whois'], p['rdns']))

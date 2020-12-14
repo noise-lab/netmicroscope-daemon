@@ -8,6 +8,7 @@ import daemon.pidfile
 import argparse
 import signal
 import logging
+import traceback 
 from appmonitor.appmonitor import AppMonitor
 
 #TODO: move this to setup.py
@@ -32,8 +33,6 @@ sp_status.add_argument('-v', '--verbose', action='store_true', help='log extra i
 sp_start.add_argument('-v', '--verbose', action='store_true', help='log extra informations')
 sp_debug.add_argument('-v', '--verbose', action='store_true', help='log extra informations')
 
-
-
 class MainCtrl:
   thread_ctrl = {
     'continue' : True,
@@ -43,7 +42,7 @@ mainctrl = MainCtrl()
 
 def main_thread_stop(signum=None, frame=None):
     mainctrl.thread_ctrl['continue'] = False
-    log.info("continue:{0}".format(mainctrl.thread_ctrl['continue']))
+    #print("continue:{0}".format(mainctrl.thread_ctrl['continue']))
     mainctrl.thread_ctrl['app'].stop()
  
 def main_thread(args, mainctrl, log):
@@ -65,6 +64,7 @@ def main_thread(args, mainctrl, log):
       exc_type, _, exc_tb = sys.exc_info()
       fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
       log.error("Exception: ({0}) {1} {2} {3}".format(str(e), exc_type, fname, exc_tb.tb_lineno))
+      traceback.print_exc()
     log.info("Exiting...")
      
 
