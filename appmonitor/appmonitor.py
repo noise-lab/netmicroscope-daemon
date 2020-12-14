@@ -323,12 +323,13 @@ class AppMonitor:
       filename = None
       rabbitmq = None
       mode = None
-      def __init__(self, process_data_from_source, iostatus, mode, thread_ctrl, rabbitmq=None):
+      def __init__(self, process_data_from_source, iostatus, mode, thread_ctrl, rabbitmq=None, influxdb=None):
         self.process_data_from_source = process_data_from_source
         self.iostatus = iostatus
         self.thread_ctrl = thread_ctrl
         self.mode = mode
         self.rabbitmq=rabbitmq
+        self.influxdb=influxdb
 
       def mqreader(self):
         while self.thread_ctrl['continue'] and self.running:
@@ -359,8 +360,18 @@ class AppMonitor:
               sys.exit(1)
             channel = connection.channel()
             channel.queue_declare(queue='hello')
-            def callback(ch, method, properties, body):
-                print(" [x] Received %r" % body)
+            def callback(ch, method, properties, line):
+              try:
+                j=json.loads(line)
+              except Exception as e:
+                log.error("unrecognized message: {0}".format(line))
+                log.error("Exception: {0}".format(e))
+                return
+              summary=get_summary_from_json(j)
+              if summary is not None:
+                self.influxdb.influxdb_queue.put(summary)
+              else:
+                log.warning("can't get summary from {0}".format(line))
             channel.basic_consume(queue=self.rabbitmq.topic, on_message_callback=callback, auto_ack=True)
 
             self.worker = threading.Thread(target=self.process_data_from_source, args=(self.rabbitmq.topic, channel,))
@@ -420,11 +431,8 @@ class AppMonitor:
         self.thread.join()
 
 
-  #def process_mq_ta(self, channel):
-  #def process_mq_ta(self, channel, method, properties, body):
   def process_mq_ta(self, topic, channel):
       log.info("Processing: " + topic)
-      print(' [*] Waiting for messages. To exit press CTRL+C')
       try:
         channel.start_consuming()
       except pika.exceptions.StreamLostError:
@@ -432,7 +440,8 @@ class AppMonitor:
       except Exception as e:
         exc_type, _, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        log.error("process_mq_ta: {0} {1} {2}".format(exc_type, fname, exc_tb.tb_lineno))
+        log.error("process_mq_ta: {0} {1} {2} {3}".format(exc_type, fname, exc_tb.tb_lineno, e))
+        traceback.print_exc()
 
   def process_tmp_ta(self, filename=""):
       if filename == "":
@@ -450,48 +459,22 @@ class AppMonitor:
         while self.iostatus[filename]['running'] and self.thread_ctrl['continue']:
           try:
               line = self.iostatus[filename]['tail'].next()
-              j=json.loads(line)
-              summary = {'std' : {}, 'ext': {}} #std == standard, ext == extended (rDNS. GeoIP, etc)
-              if 'TrafficData' not in j.keys():
-                continue
-              if 'Data' not in j['TrafficData'].keys():
-                continue
-              if j['TrafficData']['Data'] is None:
-                continue
-              for d in j['TrafficData']['Data']:
-                device = 'Device'
-                if 'HwAddr' in d:
-                    device = 'HwAddr'
-                if d[device] not in summary['std']:
-                  summary['std'][d[device]] = {}
-                  summary['ext'][d[device]] = {}
-                if d['Meta'] not in summary['std'][d[device]]:
-                    summary['std'][d[device]][d['Meta']] = { 'KbpsDw': 0.0, 'KbpsUp': 0.0, 'TsEnd': 0 }
-                    summary['ext'][d[device]][d['Meta']] = { 'Domain': None, 'SIP': None }
-  
-                summary['std'][d[device]][d['Meta']]['TsEnd'] = j['Info']['TsEnd']
-                summary['std'][d[device]][d['Meta']]['KbpsDw'] =\
-                    summary['std'][d[device]][d['Meta']]['KbpsDw'] + d['KbpsDw']
-                summary['std'][d[device]][d['Meta']]['KbpsUp'] =\
-                    summary['std'][d[device]][d['Meta']]['KbpsUp'] + d['KbpsUp']
-                summary['std'][d[device]][d['Meta']]['Domain'] = d['Domain']
-                summary['std'][d[device]][d['Meta']]['SIP'] = d['SIP']
-                #log.debug("DOMAIN:" + d['Domain'] + "," + d['SIP'])
-              self.influxdb.influxdb_queue.put(summary)
+              summary=get_summary_from_json(json.loads(line))
+              if summary is not None:
+                self.influxdb.influxdb_queue.put(summary)
+              else:
+                log.warning("can't get summary from {0}".format(line))
 
-              #for dev in summary.keys():
-              #  for app in summary[dev]:
-              #    log.debug(app + "-" + dev + " " + str(summary[dev][app]))
           except sh.ErrorReturnCode_1: # as e:
               log.info("process_tmp_ta: tail terminated {0}, (permission denied ?) ".format(filename))
               break
           except sh.SignalException_SIGKILL as e:
-              log.info("process_tmp_ta: tail terminated {0}".format(filename))
+              log.info("process_tmp_ta: tail terminated {0} {1}".format(filename, e))
               break
           except Exception as e:
               exc_type, _, exc_tb = sys.exc_info()
               fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-              log.error("process_tmp_ta: {0} {1} {2}".format(exc_type, fname, exc_tb.tb_lineno))
+              log.error("process_tmp_ta: {0} {1} {2} {4}".format(exc_type, fname, exc_tb.tb_lineno, e))
 
         log.info('process_tmp_ta: exiting ' + filename)
         #with open(iostatus, 'wb') as handle:
@@ -506,7 +489,8 @@ class AppMonitor:
 
     elif self.mode == 'c': #consumer
       log.info("Running #### SERVER/CONSUMER ####")
-      self.listener = self.TAHandler(self.process_mq_ta, self.iostatus, self.mode, self.thread_ctrl, self.rabbitmq)
+      self.listener = self.TAHandler(self.process_mq_ta, self.iostatus, self.mode, self.thread_ctrl,\
+        self.rabbitmq, self.influxdb)
       self.listener.start()
       if os.getenv('INFLUXDB_ENABLE') == 'true':
         log.info("CONSUMER: running thread.")
@@ -567,6 +551,38 @@ class AppMonitor:
         except Exception: #TODO: improve this
             pass
     self.listener.stop()
+
+def get_summary_from_json(j):
+    summary = {'std' : {}, 'ext': {}} #std == standard, ext == extended (rDNS. GeoIP, etc)
+    if 'TrafficData' not in j.keys():
+      return None
+    if 'Data' not in j['TrafficData'].keys():
+      return None
+    if j['TrafficData']['Data'] is None:
+      return None
+    for d in j['TrafficData']['Data']:
+      device = 'Device'
+      if 'HwAddr' in d:
+          device = 'HwAddr'
+      if d[device] not in summary['std']:
+        summary['std'][d[device]] = {}
+        summary['ext'][d[device]] = {}
+      if d['Meta'] not in summary['std'][d[device]]:
+          summary['std'][d[device]][d['Meta']] = { 'KbpsDw': 0.0, 'KbpsUp': 0.0, 'TsEnd': 0 }
+          summary['ext'][d[device]][d['Meta']] = { 'Domain': None, 'SIP': None }
+
+      summary['std'][d[device]][d['Meta']]['TsEnd'] = j['Info']['TsEnd']
+      summary['std'][d[device]][d['Meta']]['KbpsDw'] =\
+          summary['std'][d[device]][d['Meta']]['KbpsDw'] + d['KbpsDw']
+      summary['std'][d[device]][d['Meta']]['KbpsUp'] =\
+          summary['std'][d[device]][d['Meta']]['KbpsUp'] + d['KbpsUp']
+      summary['std'][d[device]][d['Meta']]['Domain'] = d['Domain']
+      summary['std'][d[device]][d['Meta']]['SIP'] = d['SIP']
+      #log.debug("DOMAIN:" + d['Domain'] + "," + d['SIP'])
+      #for dev in summary.keys():
+      #  for app in summary[dev]:
+      #    log.debug(app + "-" + dev + " " + str(summary[dev][app]))
+    return summary
 
 #if __name__ == "__main__":
 #  app = AppMonitor()
