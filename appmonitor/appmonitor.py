@@ -332,11 +332,10 @@ class AppMonitor:
         self.influxdb=influxdb
 
       def mqreader(self):
+        connection = None
         while self.thread_ctrl['continue'] and self.running:
           if self.worker is None:
-            connection = None
             credentials = pika.PlainCredentials(self.rabbitmq.user, self.rabbitmq.password)
-
             context = ssl.create_default_context(cafile=certifi.where());
             basepath = os.path.join(os.path.dirname(__file__), "../")
             certfile = os.path.join(basepath, self.rabbitmq.cert)
@@ -359,7 +358,7 @@ class AppMonitor:
               traceback.print_exc()
               sys.exit(1)
             channel = connection.channel()
-            channel.queue_declare(queue='hello')
+            channel.queue_declare(queue=self.rabbitmq.topic)
             def callback(ch, method, properties, line):
               try:
                 j=json.loads(line)
@@ -381,7 +380,9 @@ class AppMonitor:
             self.worker.start()
           time.sleep(1)
 
-        channel.cancel()
+        channel.stop_consuming()
+        #connection.close()
+        #channel.cancel()
         #channel.close()
 
       def fsreader(self):
@@ -413,7 +414,7 @@ class AppMonitor:
           time.sleep(10)
   
       def start(self):
-        if self.mode == 's': # standalone
+        if self.mode == 's' or self.mode == 'p': # standalone or producer
           self.thread = threading.Thread(target=self.fsreader) # file system (/tmp/tmp.ta.*)
         elif self.mode == 'c': # consumer
           self.thread = threading.Thread(target=self.mqreader) # rabbitmq receive

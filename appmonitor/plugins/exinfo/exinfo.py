@@ -55,23 +55,30 @@ class ExInfo:
         extbls = None #black list of mac addresses
         extwls = None #white list of mac addresses
         exinfodb = ExInfoDB()
+        geoip_enabled = False
         def __init__(self, exinfopath, debug): #arg TBD
             self.debug = debug
             self.loop = asyncio.get_event_loop()
             threading.Thread(target=self.thread_main_loop, 
                 args=[self.lock, self.loop],
                 daemon=True).start()
-            if os.getenv('MMGEOIP_ID') is not None:
-                mmgeoip_id = os.getenv('MMGEOIP_ID')
-            else:
-                log.error("ERROR: MMGEOIP_ID not set, Exiting...")
-                print("ERROR: MMGEOIP_ID not set, Exiting...")
-                sys.exit(1)
-            if os.getenv('MMGEOIP_KEY') is not None:
-                mmgeoip_key = os.getenv('MMGEOIP_KEY')
-            else:
-                log.error("ERROR: MMGEOIP_KEY not set, Exiting...")
-                sys.exit(1)
+            if os.getenv('MMGEOIP_ENABLE') is not None:
+                if os.getenv('MMGEOIP_ENABLE') == "true":
+                    logging.info("MMGEOIP enabled.")
+                    self.geoip_enabled = True
+                    if os.getenv('MMGEOIP_ID') is not None:
+                        mmgeoip_id = os.getenv('MMGEOIP_ID')
+                    else:
+                        log.error("ERROR: MMGEOIP_ID not set, Exiting...")
+                        print("ERROR: MMGEOIP_ID not set, Exiting...")
+                        sys.exit(1)
+                    if os.getenv('MMGEOIP_KEY') is not None:
+                        mmgeoip_key = os.getenv('MMGEOIP_KEY')
+                    else:
+                        log.error("ERROR: MMGEOIP_KEY not set, Exiting...")
+                        sys.exit(1)
+                else:
+                    logging.info("MMGEOIP disabled.")
             self.client = geoip2.webservice.Client(
                 mmgeoip_id,
                 mmgeoip_key
@@ -160,7 +167,7 @@ class ExInfo:
                 if not ext1.has_whois:
                     asyncio.run_coroutine_threadsafe(self.task_resolve_whois(self.ext, host, ext1, self.lock), self.loop)
 
-            if ext1 is not None:
+            if ext1 is not None and self.geoip_enabled:
                 if not ext1.has_geoip:
                     asyncio.run_coroutine_threadsafe(self.task_resolve_geoip(self.ext, host, ext1, self.lock), self.loop)
             return ext1, retErr

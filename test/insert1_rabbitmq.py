@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 
 load_dotenv(verbose=True)
 
-
 class RabbitMQ(object):
    host = None
    port = 0
@@ -70,7 +69,7 @@ rabbitmq.initRabbitMQ()
 connection = None
 credentials = pika.PlainCredentials(rabbitmq.user, rabbitmq.password)
 
-context = ssl.create_default_context(cafile=certifi.where());
+context = ssl.create_default_context(cafile=certifi.where())
 basepath = os.path.join(os.path.dirname(__file__), "../")
 certfile = os.path.join(basepath, rabbitmq.cert)
 keyfile = os.path.join(basepath, rabbitmq.keyf)
