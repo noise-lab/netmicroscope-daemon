@@ -1,6 +1,7 @@
 #export NMD_MODE=standalone # consumer | producer | standalone
 export NMD_MODE=consumer # consumer | producer | standalone
 #export NMD_MODE=producer # consumer | producer | standalone
+export NMD_DEPLOYMENT=martins
 export RABBITMQ_SSL_CERTFILE=
 export RABBITMQ_SSL_PKEYFILE=
 export RABBITMQ_SSL_CERTPASS=
@@ -14,7 +15,6 @@ export INFLUXDB_HOST=
 export INFLUXDB_PORT=
 export INFLUXDB_WRITE_USER=
 export INFLUXDB_WRITE_USER_PASSWORD=
-export INFLUXDB_DEPLOYMENT=
 export INFLUXDB_DB=
 export MMGEOIP_ENABLE=
 export MMGEOIP_ID=
