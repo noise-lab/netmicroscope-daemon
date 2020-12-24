@@ -11,6 +11,7 @@ cp ../../env_template netmicroscope-daemon/usr/local/src/netmicroscope-daemon/
 cp ../../appmonitor.py netmicroscope-daemon/usr/local/src/netmicroscope-daemon/
 cp -R ../../appmonitor/ netmicroscope-daemon/usr/local/src/netmicroscope-daemon/
 cp -R ../../venv/ netmicroscope-daemon/usr/local/src/netmicroscope-daemon/
+sed -i "s/VIRTUAL_ENV=\"\/home\/gmartins\/nm\/netmicroscope\-daemon\/venv\"/VIRTUAL_ENV=\"\/usr\/local\/src\/netmicroscope\-daemon\/venv\/\"/" netmicroscope-daemon/usr/local/src/netmicroscope-daemon/venv/bin/activate 
 sed -i 's/'${version_deb}'/'${version_pyc}'/g' netmicroscope-daemon/DEBIAN/control
 fakeroot dpkg-deb --build netmicroscope-daemon
 mv netmicroscope-daemon.deb netmicroscope-daemon-v${version_pyc}.deb
