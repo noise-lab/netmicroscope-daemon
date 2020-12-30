@@ -1,5 +1,30 @@
-# netmicroscope-daemon
-NetMicroscope Backend Integration Agent (linux daemon).
+# [NetMicroscope Daemon](https://github.com/noise-lab/netmicroscope-daemon/)
+NetMicroscope Backend Integration Daemon (Linux).
+
+## 1. [NetMicroscope](https://netmicroscope.com)
+
+About the NetMicroscope (NM for short): A Modularized Network Traffic Analyzer
+
+### 1.1 Standard Application
+
+NM can provide granular information about the traffic flowing from devices from known applications and services. This is the standard built-in capability provided by the NM software.
+
+![NetMicroscope Timeseries Congested Segment Example](https://github.com/noise-lab/netmicroscope-daemon/blob/master/docs/images/nm_congested_segment2.png?raw=true)
+
+[![NetMicroscope Real-Time Monitoring](https://img.youtube.com/vi/ix5GTHW4D3U/0.jpg)](https://www.youtube.com/watch?v=ix5GTHW4D3U)
+
+### 1.2 Extended Applications
+
+#### 1.2.1 Video Performace Monitoring
+TBD
+#### 1.2.2 IoT Monitoring & Automation
+TBD
+#### 1.2.3 Network Security and DPI (Deep Packet Inspection)
+TBD
+
+### 1.3 Hardware Schematics
+
+![NetMicroscope Hardware Schematics](https://github.com/noise-lab/netmicroscope-daemon/blob/master/docs/images/schematic_mirror_mode2.png?raw=true)
 
 #### Install from .deb package (recommended). ####
 
