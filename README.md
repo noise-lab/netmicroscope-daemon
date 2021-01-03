@@ -11,7 +11,11 @@ NM can provide granular information about the traffic flowing from devices from 
 
 ![NetMicroscope Timeseries Congested Segment Example](https://github.com/noise-lab/netmicroscope-daemon/blob/master/docs/images/nm_congested_segment2.png?raw=true)
 
-[![NetMicroscope Real-Time Monitoring](https://img.youtube.com/vi/ix5GTHW4D3U/0.jpg)](https://www.youtube.com/watch?v=ix5GTHW4D3U)
+<!--[![NetMicroscope Real-Time Monitoring](https://img.youtube.com/vi/ix5GTHW4D3U/0.jpg)](https://www.youtube.com/watch?v=ix5GTHW4D3U)-->
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=ix5GTHW4D3U"><img width="720" height="460" src="https://img.youtube.com/vi/ix5GTHW4D3U/0.jpg"></a>
+</p>
 
 ### 1.2 Extended Applications
 
