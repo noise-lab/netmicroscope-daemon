@@ -28,7 +28,7 @@ Network Microscope's ML Video Performace Inference Module is capable of inferrin
 *F. Bronzino\*, P. Schmitt\*, S.Ayoubi, G. Martins, R. Teixeira, N. Feamster (\*Co-First Authors).*<br>
 Proceedings of the ACM on Measurement and Analysis of Computing Systems (POMACS) and at ACM Sigmetrics 2020, Boston, USA, June 8-12, 2020.
 
-[Video Inference](https://github.com/noise-lab/netmicroscope-daemon/blob/master/docs/images/nmcharts.png?raw=true)
+![Video Inference](https://github.com/noise-lab/netmicroscope-daemon/blob/master/docs/images/nmcharts.png?raw=true)
 
 #### 1.2.2 IoT Monitoring & Automation
 TBD
