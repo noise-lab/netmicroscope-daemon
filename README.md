@@ -7,7 +7,8 @@ About the NetMicroscope (NM for short): A Modularized Network Traffic Analyzer
 
 ### 1.1 Standard Application
 
-NM can provide granular information about the traffic flowing from devices from known applications and services. This is the standard built-in capability provided by the NM software.
+NM can provide granular information about the traffic flowing from network devices to known applications and services. This is the standard built-in capability provided by the NM software. 
+NM enables network operators to determine degradations in application quality as they happen, even when the traffic is encrypted.
 
 ![NetMicroscope Timeseries Congested Segment Example](https://github.com/noise-lab/netmicroscope-daemon/blob/master/docs/images/nm_congested_segment2.png?raw=true)
 
@@ -20,7 +21,15 @@ NM can provide granular information about the traffic flowing from devices from 
 ### 1.2 Extended Applications
 
 #### 1.2.1 Video Performace Monitoring
-TBD
+
+Network Microscope's ML Video Performace Inference Module is capable of inferring video streaming quality metrics in real time, such as startup delay or video resolution, by using just a handful of features extracted from passive traffic measurement. NM passively collects a corpus of network features about the traffic flows of interest in the network and directs those to a real-time analytics framework that can perform more complex inference tasks.
+
+* Inferring Streaming Video Quality from Encrypted Traffic: Practical Models and Deployment Experience<br>
+*F. Bronzino\*, P. Schmitt\*, S.Ayoubi, G. Martins, R. Teixeira, N. Feamster (\*Co-First Authors).*<br>
+Proceedings of the ACM on Measurement and Analysis of Computing Systems (POMACS) and at ACM Sigmetrics 2020, Boston, USA, June 8-12, 2020.
+
+[Video Inference](https://github.com/noise-lab/netmicroscope-daemon/blob/master/docs/images/nmcharts.png?raw=true)
+
 #### 1.2.2 IoT Monitoring & Automation
 TBD
 #### 1.2.3 Network Security and DPI (Deep Packet Inspection)
