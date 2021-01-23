@@ -24,7 +24,7 @@ NM enables network operators to determine degradations in application quality as
 
 Network Microscope's ML Video Performace Inference Module is capable of inferring video streaming quality metrics in real time, such as startup delay or video resolution, by using just a handful of features extracted from passive traffic measurement. NM passively collects a corpus of network features about the traffic flows of interest in the network and directs those to a real-time analytics framework that can perform more complex inference tasks.
 
-* Inferring Streaming Video Quality from Encrypted Traffic: Practical Models and Deployment Experience. [[paper link]](https://arxiv.org/pdf/1901.05800.pdf)<br>
+* Inferring Streaming Video Quality from Encrypted Traffic: Practical Models and Deployment Experience. [[paper]](https://arxiv.org/pdf/1901.05800.pdf)<br>
 *F. Bronzino\*, P. Schmitt\*, S.Ayoubi, G. Martins, R. Teixeira, N. Feamster (\*Co-First Authors).*<br>
 Proceedings of the ACM on Measurement and Analysis of Computing Systems (POMACS) and at ACM Sigmetrics 2020, Boston, USA, June 8-12, 2020.
 

@@ -84,8 +84,11 @@ class ExInfoDB: # Extended Info
     session = None
     conn = None
     debug = None
+    in_memory = None
+
     def __init__(self, debug = False):
         self.session = {}
+        self.in_memory = {}
         self.debug = debug
 
     def getSession(self):
@@ -118,25 +121,31 @@ class ExInfoDB: # Extended Info
         return c, None
 
     def insertEx(self, e):
+        if e[0].host in self.in_memory.keys():
+            return e, None
         session = self.getSession()
         try:
+            #log.warn("insertEx: COMMIT")
             session.bulk_save_objects(
                 e,
                 return_defaults=True,
             )     
             session.commit()
         except Exception as err:
+            #log.warn("insertEx: ROLLBACK")
             session.rollback()
             e = self.getEx(e[0].host)
-            return e, "{}".format(err)
+            return e, "({0}) {1}".format(e, err)
         return e, None
     
     def updateExQuery(self, ex, query):
         session = self.getSession()
         session.query(Ext).filter(Ext.host == ex.host).update({'query' : query})
         try:
+            #log.warn("updateExQuery: COMMIT")
             session.commit()
         except Exception as err:
+            #log.warn("updateExQuery: ROLLBACK")
             session.rollback()
 
     def updateEx(self, ex, exinfo, qr=0):
@@ -163,9 +172,11 @@ class ExInfoDB: # Extended Info
               rdns = session.query(Rdns).filter_by(host=ex.host).all()
               return rdns, None
         try:
+            #log.warn("updateEx: COMMIT")
             session.add_all([exinfo])
             session.commit()
         except Exception as err:
+            #log.warn("updateEx: ROLLBACK")
             session.rollback()
             return [exinfo], "{}".format(err)
 
@@ -194,6 +205,7 @@ class ExInfoDB: # Extended Info
                         #else:
                         #    query = "unresolved"
 
+            #log.warn("hitAndUpdate: COMMIT")
             if query is None:
                 session.query(Ext).filter_by(host=ex.host).update({
                     'hits' : ex.hits + 1 if ex.hits < (MAX_VALUES_PER_TAG - 1) else MAX_VALUES_PER_TAG - 1,
@@ -207,7 +219,9 @@ class ExInfoDB: # Extended Info
                 })
         
             session.commit()
+            self.in_memory[ex.host] = ex
         except Exception as err:
+            #log.warn("hitAndUpdate: ROLLBACK")
             session.rollback()
             return False, "({0}/{1})".format(err, host)
         return True, None

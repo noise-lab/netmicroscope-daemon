@@ -77,12 +77,12 @@ class ExInfo:
                     else:
                         log.error("ERROR: MMGEOIP_KEY not set, Exiting...")
                         sys.exit(1)
+                    self.client = geoip2.webservice.Client(
+                      mmgeoip_id,
+                      mmgeoip_key
+                   )
                 else:
                     logging.info("MMGEOIP disabled.")
-            self.client = geoip2.webservice.Client(
-                mmgeoip_id,
-                mmgeoip_key
-            )
             if not path.exists(exinfopath):
                 os.mkdir(exinfopath)
             if path.exists(extbls):
