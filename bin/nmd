@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cd ~/nm/netmicroscope-daemon/;
+source ./venv/bin/activate
+./nmd $@
