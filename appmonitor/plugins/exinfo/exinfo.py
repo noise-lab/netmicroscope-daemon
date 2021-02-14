@@ -330,20 +330,21 @@ def preprocess(data):
   query = None
   insert = []
   timestamp = None
+
   if data is None:
       return data
 
-  if 'std' in data.keys():
-    if data['std'] is not None:
-      for dev in data['std'].keys():
-        for app in data['std'][dev].keys():
-          if 'SIP' in data['std'][dev][app].keys():
-            sip = data['std'][dev][app]['SIP']
+  if 'std' in data['summary'].keys():
+    if data['summary']['std'] is not None:
+      for dev in data['summary']['std'].keys():
+        for app in data['summary']['std'][dev].keys():
+          if 'SIP' in data['summary']['std'][dev][app].keys():
+            sip = data['summary']['std'][dev][app]['SIP']
             device = dev
-          if 'Domain' in data['std'][dev][app].keys():
-            query = data['std'][dev][app]['Domain']
+          if 'Domain' in data['summary']['std'][dev][app].keys():
+            query = data['summary']['std'][dev][app]['Domain']
           do_insert = False
-          timestamp = str(data['std'][dev][app]['TsEnd'])
+          timestamp = str(data['summary']['std'][dev][app]['TsEnd'])
           if sip is not None and query is not None:
             if exinfo.iswhitelisted(device):
                 do_insert = True
@@ -449,7 +450,7 @@ def preprocess(data):
         except KeyError:
             #TODO: better error handling
             pass
-  data['ext']['insert'] = insert
+  data['summary']['ext']['insert'] = insert
   return data
 
 def test_query(sip, query):

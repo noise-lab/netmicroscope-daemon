@@ -215,8 +215,6 @@ class AppMonitor:
         self.mqwriter.channel.queue_declare(queue=self.topic)
 
       while self.thread_ctrl['continue']:
-        # TODO: decide raw json vs data summary?
-        # summary = pluginPreProcess(self.rabbitmq_queue.get())
         line = self.rabbitmq_queue.get()
         self.mqwriter.channel.basic_publish(exchange='', routing_key=self.topic, body="{0}".format(line)) #summary
       self.mqwriter.connection.close()
@@ -250,7 +248,8 @@ class AppMonitor:
               self.database + "/rp&precision=ns"
           if self.header == None:
             self.header = {'Authorization': 'Token ' + self.userw + ":" + self.passw}
-          summary = pluginPreProcess(self.influxdb_queue.get())
+          data = pluginPreProcess(self.influxdb_queue.get())
+          summary = data['summary']
           if summary is None:
             continue
           if 'std' not in summary.keys():
@@ -413,7 +412,7 @@ class AppMonitor:
                 return
               summary=get_summary_from_json(j)
               if summary is not None:
-                self.influxdb.influxdb_queue.put(summary)
+                self.influxdb.influxdb_queue.put({'summary': summary, 'json': j})
               else:
                 log.warning("can't get summary from {0}".format(line))
             channel.basic_consume(queue=self.rabbitmq.topic, on_message_callback=callback, auto_ack=True)
@@ -423,8 +422,7 @@ class AppMonitor:
             self.iostatus[self.rabbitmq.topic]['thread'] = self.worker
             self.iostatus[self.rabbitmq.topic]['channel'] = channel
             self.worker.start()
-          time.sleep(1)
-
+          time.sleep(5)
         channel.stop_consuming()
         #connection.close()
         #channel.cancel()
@@ -505,11 +503,11 @@ class AppMonitor:
         while self.iostatus[filename]['running'] and self.thread_ctrl['continue']:
           try:
               line = self.iostatus[filename]['tail'].next()
-              #TODO: decide whether send summary (we still have chance to filter data) or raw json line    
               if is_standalone:
-                summary=get_summary_from_json(json.loads(line))
+                j = json.loads(line)
+                summary=get_summary_from_json(j)
                 if summary is not None:
-                  self.influxdb.influxdb_queue.put(summary)
+                  self.influxdb.influxdb_queue.put({'summary': summary, 'json': j})
                 else:
                   log.warning("can't get summary from {0}".format(line))
               else:

@@ -54,18 +54,21 @@ def init(conf=None):
 
 def preprocess(data):
   ddata = {}
+
   if oui is None:
     log.error("ouimap: ERROR oui dict not initialized")
     return data
+
   if data is None:
     return data
-  if 'std' in data.keys() and data['std'] is not None:
-    for dev in data['std'].keys():
+
+  if 'std' in data['summary'].keys() and data['summary']['std'] is not None:
+    for dev in data['summary']['std'].keys():
       try:
-        ddata[transform(oui[dev[:8]])+dev[-2]+dev[-1]] = data['std'][dev]
+        ddata[transform(oui[dev[:8]])+dev[-2]+dev[-1]] = data['summary']['std'][dev]
       except KeyError:
-        ddata[dev[:8]+"_"+dev[-2]+dev[-1]] = data['std'][dev]
-  data['std'] = ddata
+        ddata[dev[:8]+"_"+dev[-2]+dev[-1]] = data['summary']['std'][dev]
+  data['summary']['std'] = ddata
   return data
 
 def transform(str):
