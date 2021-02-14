@@ -412,7 +412,7 @@ class AppMonitor:
                 return
               summary=get_summary_from_json(j)
               if summary is not None:
-                self.influxdb.influxdb_queue.put({'summary': summary, 'json': j})
+                self.influxdb.influxdb_queue.put({'summary': summary, 'json': line})
               else:
                 log.warning("can't get summary from {0}".format(line))
             channel.basic_consume(queue=self.rabbitmq.topic, on_message_callback=callback, auto_ack=True)
@@ -507,7 +507,7 @@ class AppMonitor:
                 j = json.loads(line)
                 summary=get_summary_from_json(j)
                 if summary is not None:
-                  self.influxdb.influxdb_queue.put({'summary': summary, 'json': j})
+                  self.influxdb.influxdb_queue.put({'summary': summary, 'json': line})
                 else:
                   log.warning("can't get summary from {0}".format(line))
               else:
