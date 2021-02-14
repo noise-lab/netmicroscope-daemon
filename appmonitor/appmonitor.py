@@ -44,30 +44,30 @@ class AppMonitor:
 
   def initInfluxdb(self):
     if os.getenv('INFLUXDB_ENABLE') == 'true':
-      log.info("INFO: influxdb enabled, checking environment variables...")
+      log.info("INFO:/influxdb enabled, checking environment variables...")
       self.influxdb.deployment = self.deployment
       if os.getenv('INFLUXDB_HOST') is not None:
-        self.influxdb.host = os.getenv('INFLUXDB_HOST')
+        self.influxdb.conf['host'] = os.getenv('INFLUXDB_HOST')
       else:
         log.error("ERROR: INFLUXDB_HOST not set, Exiting...")
         sys.exit(1)
       if os.getenv('INFLUXDB_PORT') != 0:
-        self.influxdb.port = os.getenv('INFLUXDB_PORT')
+        self.influxdb.conf['port'] = os.getenv('INFLUXDB_PORT')
       else:
         log.error("ERROR: INFLUXDB_PORT not set, Exiting...")
         sys.exit(1)
       if os.getenv('INFLUXDB_WRITE_USER') is not None:
-        self.influxdb.userw = os.getenv('INFLUXDB_WRITE_USER')
+        self.influxdb.conf['userw'] = os.getenv('INFLUXDB_WRITE_USER')
       else:
         log.error("ERROR: INFLUXDB_WRITE_USER not set, Exiting...")
         sys.exit(1)
       if os.getenv('INFLUXDB_WRITE_USER_PASSWORD') is not None:
-        self.influxdb.passw = os.getenv('INFLUXDB_WRITE_USER_PASSWORD')
+        self.influxdb.conf['passw'] = os.getenv('INFLUXDB_WRITE_USER_PASSWORD')
       else:
         log.error("ERROR: INFLUXDB_WRITE_USER_PASSWORD not set, Exiting...")
         sys.exit(1)
       if os.getenv('INFLUXDB_DB') is not None:
-        self.influxdb.database = os.getenv('INFLUXDB_DB')
+        self.influxdb.conf['database'] = os.getenv('INFLUXDB_DB')
       else:
         log.error("ERROR: INFLUXDB_DB not set, Exiting...")
         sys.exit(1)
@@ -136,7 +136,7 @@ class AppMonitor:
     for p in self.getPlugins():
       log.info("Loading plugin " + p["name"])
       plugin = self.loadPlugin(p)
-      priority, errmsg = plugin.init({'deployment': self.deployment})
+      priority, errmsg = plugin.init({'deployment' : self.deployment, 'conf_influxdb' : self.influxdb.conf}) #TODO: add continue/flags for graceful exit
       if priority < 0:
         log.info(errmsg)
         sys.exit(1)
@@ -220,18 +220,21 @@ class AppMonitor:
       self.mqwriter.connection.close()
 
   class InfluxDB(object):
-    host = None
-    port = 0
-    db = None
-    userw = None
-    passw = None
+   conf = {
+        'host': None,
+        'port': 0,
+        'db': None,
+        'userw': None,
+        'passw': None,
+        'url': None,
+    }
     deployment = None
-    database = None
+    #database = None #moved to conf dict
     thread_ctrl = None
     insert_memory = None
 
     #var built at runtime
-    url = None
+    #url = None #moved to conf
     header = None
 
     #insert = None #inser queue
@@ -243,11 +246,11 @@ class AppMonitor:
 
     def influxdb_updater_thread(self, pluginPreProcess):
       while self.thread_ctrl['continue']:
-          if self.url == None:
-            self.url = "https://" + self.host + ":" + self.port + "/api/v2/write?bucket=" +\
-              self.database + "/rp&precision=ns"
+          if self.conf['url'] == None:
+            self.conf['url'] = "https://" + self.conf['host'] + ":" + self.conf['port'] + "/api/v2/write?bucket=" +\
+              self.conf['database'] + "/rp&precision=ns"
           if self.header == None:
-            self.header = {'Authorization': 'Token ' + self.userw + ":" + self.passw}
+            self.header = {'Authorization': 'Token ' + self.conf['userw'] + ":" + self.conf['passw']}
           data = pluginPreProcess(self.influxdb_queue.get())
           summary = data['summary']
           if summary is None:
@@ -343,7 +346,7 @@ class AppMonitor:
                 data = data + insertLine + "\n"
                 #print(insertLine)
             data = data.encode()
-            req = urllib.request.Request(self.url, data, self.header)
+            req = urllib.request.Request(self.conf['url'], data, self.header)
             with urllib.request.urlopen(req) as response:
                log.info('OK' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
           except Exception as e:
