@@ -220,13 +220,13 @@ class AppMonitor:
       self.mqwriter.connection.close()
 
   class InfluxDB(object):
-   conf = {
+    conf = {
         'host': None,
         'port': 0,
         'db': None,
         'userw': None,
         'passw': None,
-        'url': None,
+        'url': None
     }
     deployment = None
     #database = None #moved to conf dict
@@ -352,8 +352,8 @@ class AppMonitor:
           except Exception as e:
               exc_type, _, exc_tb = sys.exc_info()
               fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-              log.error("EXCEPTION: influxdb_updater_thread: {0} {1} {2} (dev:{3}) {4} {5}"\
-                      .format(exc_type, fname, exc_tb.tb_lineno, dev, e, e.read().decode("utf8", 'ignore')))
+              log.error("EXCEPTION: influxdb_updater_thread: {0} {1} {2} (dev:{3}) {4}"\
+                      .format(exc_type, fname, exc_tb.tb_lineno, dev, e)) #e.read().decode("utf8", 'ignore')
 
           self.influxdb_queue.task_done()
   
