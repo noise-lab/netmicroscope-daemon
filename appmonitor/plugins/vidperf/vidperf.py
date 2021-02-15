@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 import asyncio #TODO: mutex/lock
 import threading
 from subprocess import Popen, PIPE
+import json
+import urllib
+import urllib.request
 """appmonitor plugin template"""
 PLUGIN_PRIORITY = 3
 
@@ -11,6 +14,7 @@ config = None
 ta_data = None
 ta_file = None
 ta_file_name = 'ta_10.out'
+header = None
 log = logging.getLogger(__name__)
 
 schedule = sched.scheduler(time.time, time.sleep)
@@ -26,41 +30,108 @@ def ceil_dt(dt, delta):
 first_run = True
 
 def run_yellow_alert(sc):
+    global config
+    global header
+    db = config['conf_influxdb']
     log.info("nm_analysis: {0} YELLOW".format(datetime.now()))
+    tnow = round(time.time())
+    insertData = 'network_traffic_vidperf_startup'+\
+                  ',deployment=' + config['deployment'] +\
+                  ',device=' + 'demo' +\
+                  ',color=' + 'yellow' +\
+                  ',application=' + 'demo' +\
+                  ' value=0' +\
+                  ' ' + str(tnow) + '000000000' + '\n'
+    if insertData != '':
+      data = insertData.encode()
+      req = urllib.request.Request(db['url'], data, header)
+      with urllib.request.urlopen(req) as response:
+        log.info('OK (Startup)' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
 
 def run_red_inference(sc):
     global ta_file
+    global config
+    global header
+    db = config['conf_influxdb']
     log.info("nm_analysis: {0} RED".format(datetime.now()))
     #TODO: mutex/lock
     ta_file.close()
     ta_file = None
+    tnow = round(time.time())
     cmd = "{0} {1}".format(runpath, ta_data)
     run_output = Popen(cmd, shell=True, stdout=PIPE).stdout.read().decode('utf-8')
     log.info(cmd)
     log.info(run_output)
+    j = json.loads(run_output)
+
+    if 'sessions' not in j.keys():
+        log.error("No sessions in nm_analysis output")
+        return
+
+    insertData = 'network_traffic_vidperf_startup'+\
+                  ',deployment=' + config['deployment'] +\
+                  ',device=' + 'demo' +\
+                  ',color=' + 'red' +\
+                  ',application=' + 'demo' +\
+                  ' value=0' +\
+                  ' ' + str(tnow) + '000000000' + '\n'
+                  
+    for i in j['sessions']:
+        tnow = round(time.time())
+        log.info("Startup time: {0}:{1}".format(i['startup time']["startup"], config['deployment']))
+        insertData = insertData + 'network_traffic_vidperf_startup'+\
+                  ',deployment=' + config['deployment'] +\
+                  ',device=' + 'demo' +\
+                  ',color=' + 'blue' +\
+                  ',application=' + 'demo' +\
+                  ' value=' + str(i['startup time']["startup"]) +\
+                  ' ' + str(tnow) + '000000000' + '\n'
+
+        t = tnow
+        resolutions = i['resolutions']['predictions']
+        t = t - len(resolutions)
+        for k in resolutions:
+          insertData = insertData + 'network_traffic_vidperf_resolution'+\
+                  ',deployment=' + config['deployment'] +\
+                  ',device=' + 'demo' +\
+                  ',color=' + 'blue' +\
+                  ',application=' + 'demo' +\
+                  ' value=' + str(k) +\
+                  ' ' + str(t) + '000000000' + '\n'
+          t += 1
+
+    if insertData != '':
+      data = insertData.encode()
+      req = urllib.request.Request(db['url'], data, header)
+      with urllib.request.urlopen(req) as response:
+        log.info('OK (Startup)' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
 
 def main_run(sc):
     sc.run();
 
 def run_clock(sc):
-    #TODO: move this to object
+    #TODO: move this to class
+    global header
     global ta_data
     global first_run
     global ta_path
     global ta_file
     global ta_file_name
     global datapath
+    global config
+    db = config['conf_influxdb']
     now = datetime.now()
     log.info("nm_analysis {0} GREEN".format(now.strftime("%Y%m%d-%H%M%S")))
-    wait_minutes = 1
-    if now.minute % 2 == 0:
-        wait_minutes = 2
+    wait_minutes = 10
+    #wait_minutes = 1
+    #if now.minute % 2 == 0:
+    #    wait_minutes = 2
     fut = ceil_dt(now, timedelta(minutes=wait_minutes)) 
     delta = (fut - now).total_seconds()
     schedule.enter(delta, 1, run_clock, (sc,))
     if not first_run:
       schedule.enter(delta - 10, 1, run_yellow_alert, (sc,)) 
-      schedule.enter(delta / 2, 1, run_red_inference, (sc,)) 
+      schedule.enter(delta - 20, 1, run_red_inference, (sc,)) 
     else: 
       first_run = False
       return
@@ -68,11 +139,26 @@ def run_clock(sc):
     ta_data = os.path.join(ta_path, ta_file_name)
     os.mkdir(ta_path)
     ta_file = open(ta_data, 'w')
+    tnow = round(time.time())
+    insertData = 'network_traffic_vidperf_startup'+\
+                  ',deployment=' + config['deployment'] +\
+                  ',device=' + 'demo' +\
+                  ',color=' + 'green' +\
+                  ',application=' + 'demo' +\
+                  ' value=0' +\
+                  ' ' + str(tnow) + '000000000' + '\n'
+    if insertData != '':
+      data = insertData.encode()
+      req = urllib.request.Request(db['url'], data, header)
+      with urllib.request.urlopen(req) as response:
+        log.info('OK (Startup)' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
 
 def init(conf = None):
+  global header
+  global config 
   global schedule
-  config = None
-  print(conf)
+  config = conf
+  header = {'Authorization': 'Token ' + config['conf_influxdb']['userw'] + ":" + config['conf_influxdb']['passw']}
   if os.path.exists(nmapath):
     log.info("vidperf plugin init with {0}".format(config))
     schedule.enter(1, 1, run_clock, (schedule,))

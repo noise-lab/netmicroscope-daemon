@@ -1,7 +1,7 @@
 #!/bin/bash
 
-SUPPORTED_APP=youtube
-#SUPPORTED_APP=netflix
+#SUPPORTED_APP=youtube
+SUPPORTED_APP=netflix
 #SUPPORTED_APP=amazon
 #SUPPORTED_APP=twitch
 #SUPPORTED_APP=spotify
@@ -91,7 +91,5 @@ SM=startup_time_rfr_all_FINAL_MODEL_time10_model.pkl
 #SM=startup_time_rfr_youtube_L3_L7_time10_model.pkl
 
 #TEST DATA
-#python3 -m nm_analysis.video.run -n /home/gmartins/nm/netmicroscope-daemon/appmonitor/plugins/vidperf/data/test_data/ta_10.out -r models/resolution.pkl -i models/startup.pkl -s youtub
-#python3 -m nm_analysis.video.run -n nm_analysis/video/test_data/ta_10.out -i models/$SM  -r models/$RM  -s $SUPPORTED_APP 2>$NMPATH/nm_analysis.debug.txt
-python3 -m nm_analysis.video.run -n $NMPATH/data/test_data/ta_10.out -i models/$SM  -r models/$RM  -s $SUPPORTED_APP 2>$NMPATH/nm_analysis.debug.txt
-#python3 -m nm_analysis.video.run -n $1 -i models/$SM  -r models/$RM  -s $SUPPORTED_APP 2>$NMPATH/nm_analysis.debug.txt | tee nm_analysis.output.txt
+#python3 -m nm_analysis.video.run -n $NMPATH/data/test_data/ta_10.out -i models/$SM  -r models/$RM  -s $SUPPORTED_APP 2>$NMPATH/nm_analysis.debug.txt
+python3 -m nm_analysis.video.run -n $1 -i models/$SM  -r models/$RM  -s $SUPPORTED_APP 2>$NMPATH/nm_analysis.debug.txt | tee nm_analysis.output.txt
