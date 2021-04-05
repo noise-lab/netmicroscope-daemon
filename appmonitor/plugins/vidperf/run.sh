@@ -96,7 +96,7 @@ SM=startup_time_rfr_all_L7_time10_model.pkl
 
 #TEST DATA
 #python3 -m nm_analysis.video.run -n $NMPATH/data/test_data/ta_10.out -i models/$SM  -r models/$RM  -s $SUPPORTED_APP 2>$NMPATH/nm_analysis.debug.txt
-#python3 -m nm_analysis.video.run -n $1 -i models/$SM  -r models/$RM  -s $SUPPORTED_APP --fts "L7" 2>$NMPATH/nm_analysis.debug.txt 2>$NMPATH/nm_analysis.debug.txt >$NMPATH/nm_analysis.output.txt
-python3 -m nm_analysis.video.run -n $test_input -i models/$SM -r models/$RM -s $SUPPORTED_APP --fts "L7" 2>$NMPATH/nm_analysis.debug.txt 2>$NMPATH/nm_analysis.debug.txt >$NMPATH/nm_analysis.output.txt
+python3 -m nm_analysis.video.run -n $1 -i models/$SM  -r models/$RM  -s $SUPPORTED_APP --fts "L7" 2>$NMPATH/nm_analysis.debug.txt 2>$NMPATH/nm_analysis.debug.txt >$NMPATH/nm_analysis.output.txt
+#python3 -m nm_analysis.video.run -n $test_input -i models/$SM -r models/$RM -s $SUPPORTED_APP --fts "L7" 2>$NMPATH/nm_analysis.debug.txt 2>$NMPATH/nm_analysis.debug.txt >$NMPATH/nm_analysis.output.txt
 cat $NMPATH/nm_analysis.output.txt >> $NMPATH/nm_analysis.output.log.txt
 cat $NMPATH/nm_analysis.output.txt
