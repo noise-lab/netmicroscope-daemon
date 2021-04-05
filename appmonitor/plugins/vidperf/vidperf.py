@@ -1,5 +1,5 @@
 import logging
-import sched, time, os
+import sched, time, os, io
 from datetime import datetime, timedelta
 import asyncio #TODO: mutex/lock
 import threading
@@ -52,6 +52,7 @@ def run_red_inference(sc):
     global ta_file
     global config
     global header
+    #print ("run_red_inference")
     db = config['conf_influxdb']
     log.info("nm_analysis: {0} RED".format(datetime.now()))
     #TODO: mutex/lock
@@ -60,22 +61,48 @@ def run_red_inference(sc):
     tnow = round(time.time())
     cmd = "{0} {1}".format(runpath, ta_data)
     run_output = Popen(cmd, shell=True, stdout=PIPE).stdout.read().decode('utf-8')
+    #print(run_output)
+    color = 'orange'
     log.info(cmd)
     log.info(run_output)
-    j = json.loads(run_output)
 
-    if 'sessions' not in j.keys():
+    j = None
+    buf=io.StringIO(run_output)
+    for l in buf.readlines():
+        try:
+          #print("|{0}|\n".format(l))
+          j = json.loads(l)
+          if 'sessions' in j.keys():
+              color = 'orange'
+              break
+        except:
+            pass
+            color = 'red'
+
+    if j is None:
+        color = 'red'
+    elif 'sessions' not in j.keys():
         log.error("No sessions in nm_analysis output")
-        return
+        color = 'red'
 
     insertData = 'network_traffic_vidperf_startup'+\
                   ',deployment=' + config['deployment'] +\
                   ',device=' + 'demo' +\
-                  ',color=' + 'red' +\
+                  ',color=' + color +\
                   ',application=' + 'demo' +\
                   ' value=0' +\
                   ' ' + str(tnow) + '000000000' + '\n'
-                  
+
+    if insertData != '':
+      data = insertData.encode()
+      req = urllib.request.Request(db['url'], data, header)
+      with urllib.request.urlopen(req) as response:
+        log.info('OK (Startup)' if response.getcode()==204 else 'Unexpected:'+str(response.getcode()))
+
+    if color == 'red':
+        return
+
+    insertData = '' 
     for i in j['sessions']:
         tnow = round(time.time())
         log.info("Startup time: {0}:{1}".format(i['startup time']["startup"], config['deployment']))
@@ -132,8 +159,10 @@ def run_clock(sc):
     if not first_run:
       schedule.enter(delta - 10, 1, run_yellow_alert, (sc,)) 
       schedule.enter(delta - 20, 1, run_red_inference, (sc,)) 
+      print ("YELLOW/RED")
     else: 
       first_run = False
+      print ("FIRST")
       return
     ta_path = os.path.join(datapath, now.strftime("%Y%m%d-%H%M%S"))
     ta_data = os.path.join(ta_path, ta_file_name)
@@ -189,5 +218,5 @@ def test1():
     run_output = Popen(cmd, shell=True, stdout=PIPE).stdout.read().decode('utf-8')
     print("OUTPUT: {0}",format(run_output))
 
-if __name__ == "__main__":
-    test1()
+#if __name__ == "__main__":
+#    test1()
