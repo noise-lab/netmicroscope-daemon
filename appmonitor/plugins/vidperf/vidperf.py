@@ -9,7 +9,7 @@ import urllib
 import urllib.request
 """appmonitor plugin template"""
 PLUGIN_PRIORITY = 3
-
+TIMEBOX = 5
 config = None
 ta_data = None
 ta_file = None
@@ -149,13 +149,12 @@ def run_clock(sc):
     db = config['conf_influxdb']
     now = datetime.now()
     log.info("nm_analysis {0} GREEN".format(now.strftime("%Y%m%d-%H%M%S")))
-    wait_minutes = 10
-    #wait_minutes = 1
-    #if now.minute % 2 == 0:
-    #    wait_minutes = 2
+
+    wait_minutes = TIMEBOX
     fut = ceil_dt(now, timedelta(minutes=wait_minutes)) 
     delta = (fut - now).total_seconds()
     schedule.enter(delta, 1, run_clock, (sc,))
+
     if not first_run:
       schedule.enter(delta - 10, 1, run_yellow_alert, (sc,)) 
       schedule.enter(delta - 20, 1, run_red_inference, (sc,)) 
