@@ -3,7 +3,6 @@ import logging
 """appmonitor plugin template"""
 PLUGIN_PRIORITY = 0
 
-printF = print
 config = None
 
 log = logging.getLogger(__name__)
